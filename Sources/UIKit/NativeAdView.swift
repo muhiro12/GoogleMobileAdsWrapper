@@ -1,5 +1,5 @@
 //
-//  NativeAdmob.swift
+//  NativeAdView.swift
 //  Incomes
 //
 //  Created by Hiromu Nakano on 2023/09/15.
@@ -7,35 +7,15 @@
 //
 
 import GoogleMobileAds
-import SwiftUI
 
-// swiftlint:disable file_types_order one_declaration_per_file
-struct NativeAdmob {
-    let adUnitID: String
-    let sizeID: String
-}
-
-extension NativeAdmob: UIViewRepresentable {
-    typealias UIViewType = UIView
-
-    func makeUIView(context: Context) -> UIViewType {
-        NativeAdmobView(adUnitID: adUnitID, sizeID: sizeID)
-    }
-
-    func updateUIView(_ uiView: UIViewType, context: Context) {}
-}
-
-// MARK: - GADNativeAdView
-
-private final class NativeAdmobView: UIView {
-    // periphery:ignore
+final class NativeAdView: UIView {
     private var loader: GADAdLoader?
     private var view: GADNativeAdView?
 
-    init(adUnitID: String, sizeID: String) {
+    init(adUnitID: String, size: NativeAdSize) {
         super.init(frame: .zero)
 
-        guard let view = UINib(nibName: sizeID + String(describing: type(of: self)), bundle: .module)
+        guard let view = UINib(nibName: size.rawValue + String(describing: type(of: self)), bundle: .module)
                 .instantiate(withOwner: self, options: nil).first as? GADNativeAdView
         else {
             assertionFailure("Failed to init GADNativeAdView")
@@ -67,7 +47,7 @@ private final class NativeAdmobView: UIView {
     }
 }
 
-extension NativeAdmobView: GADNativeAdLoaderDelegate {
+extension NativeAdView: GADNativeAdLoaderDelegate {
     func adLoader(_ adLoader: GADAdLoader, didReceive nativeAd: GADNativeAd) {
         if let mediaView = view?.mediaView {
             mediaView.widthAnchor
@@ -90,4 +70,3 @@ extension NativeAdmobView: GADNativeAdLoaderDelegate {
         view?.isHidden = true
     }
 }
-// swiftlint:enable file_types_order one_declaration_per_file

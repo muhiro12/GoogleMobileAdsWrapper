@@ -8,21 +8,22 @@
 import SwiftUI
 import GoogleMobileAds
 
-public struct GoogleMobileAdsController {
+public final class GoogleMobileAdsController {
     private let adUnitID: String
 
     public init(adUnitID: String) {
         self.adUnitID = adUnitID
-
-        Task {
-            await GADMobileAds.sharedInstance().start()
-        }
     }
 
-    public func buildView(_ id: String) -> some View {
-        NativeAdmob(
-            adUnitID: adUnitID,
-            sizeID: id
-        )
+    public func start() {
+        GADMobileAds.sharedInstance().start()
+    }
+
+    @ViewBuilder
+    public func buildView(_ sizeID: String) -> some View {
+        if let size = NativeAdSize(rawValue: sizeID) {
+            NativeAd(size: size)
+                .environment(\.adUnitID, adUnitID)
+        }
     }
 }
