@@ -20,7 +20,7 @@ public final class GoogleMobileAdsController {
     }
 
     @ViewBuilder
-    public func buildView(_ sizeID: String) -> some View {
+    public func buildNativeAd(_ sizeID: String) -> some View {
         if let size = NativeAdSize(rawValue: sizeID) {
             NativeAd(size: size)
                 .environment(\.adUnitID, adUnitID)
