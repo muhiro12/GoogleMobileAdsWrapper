@@ -58,8 +58,14 @@
                                             <nil key="textColor"/>
                                             <nil key="highlightedColor"/>
                                         </label>
+                                        <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Body" textAlignment="natural" lineBreakMode="tailTruncation" numberOfLines="2" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="KV8-Gl-Kge">
+                                            <rect key="frame" x="0.0" y="52.5" width="98.5" height="18"/>
+                                            <fontDescription key="fontDescription" style="UICTFontTextStyleSubhead"/>
+                                            <nil key="textColor"/>
+                                            <nil key="highlightedColor"/>
+                                        </label>
                                         <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="GnK-Jr-TIg">
-                                            <rect key="frame" x="0.0" y="52.5" width="98.5" height="51.5"/>
+                                            <rect key="frame" x="0.0" y="78.5" width="98.5" height="25.5"/>
                                             <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                                         </view>
                                     </subviews>
@@ -88,6 +94,7 @@
             <connections>
                 <outlet property="advertiserView" destination="Sfy-1o-5ub" id="C5l-9e-okv"/>
                 <outlet property="headlineView" destination="Q3B-9m-aNB" id="mna-vI-czp"/>
+                <outlet property="bodyView" destination="KV8-Gl-Kge" id="hHD-8T-9Nz"/>
                 <outlet property="mediaView" destination="4EE-vf-FJM" id="fFE-lk-tWe"/>
             </connections>
             <point key="canvasLocation" x="139" y="81"/>

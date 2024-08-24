@@ -39,6 +39,11 @@ final class NativeAdView: UIView {
         loader.delegate = self
         loader.load(GADRequest())
         self.loader = loader
+
+        if let button = view.callToActionView {
+            button.layer.cornerRadius = button.frame.height / 2
+            button.layer.masksToBounds = true
+        }
     }
 
     @available(*, unavailable)

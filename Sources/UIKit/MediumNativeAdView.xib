@@ -83,32 +83,23 @@
                         <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="PyP-qo-ffc">
                             <rect key="frame" x="0.0" y="272" width="360" height="48"/>
                             <subviews>
-                                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="DaA-1q-61R">
+                                <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Call to action" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="PBw-rw-wM0">
                                     <rect key="frame" x="8" y="8" width="344" height="32"/>
-                                    <subviews>
-                                        <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Call to action" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="PBw-rw-wM0">
-                                            <rect key="frame" x="8" y="0.0" width="328" height="32"/>
-                                            <fontDescription key="fontDescription" style="UICTFontTextStyleSubhead"/>
-                                            <color key="textColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-                                            <nil key="highlightedColor"/>
-                                        </label>
-                                    </subviews>
                                     <color key="backgroundColor" systemColor="tintColor"/>
                                     <constraints>
-                                        <constraint firstAttribute="bottom" secondItem="PBw-rw-wM0" secondAttribute="bottom" id="5wm-xs-Shi"/>
-                                        <constraint firstAttribute="height" constant="32" id="ADR-ch-qPT"/>
-                                        <constraint firstItem="PBw-rw-wM0" firstAttribute="top" secondItem="DaA-1q-61R" secondAttribute="top" id="G3V-vy-QMQ"/>
-                                        <constraint firstItem="PBw-rw-wM0" firstAttribute="leading" secondItem="DaA-1q-61R" secondAttribute="leading" constant="8" id="JWE-H6-e3a"/>
-                                        <constraint firstAttribute="trailing" secondItem="PBw-rw-wM0" secondAttribute="trailing" constant="8" id="m7u-p9-lxy"/>
+                                        <constraint firstAttribute="height" constant="32" id="FE7-FM-S8Y"/>
                                     </constraints>
-                                </view>
+                                    <fontDescription key="fontDescription" style="UICTFontTextStyleSubhead"/>
+                                    <color key="textColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                                    <nil key="highlightedColor"/>
+                                </label>
                             </subviews>
                             <color key="backgroundColor" systemColor="systemBackgroundColor"/>
                             <constraints>
-                                <constraint firstAttribute="trailing" secondItem="DaA-1q-61R" secondAttribute="trailing" constant="8" id="L2J-9q-NfE"/>
-                                <constraint firstItem="DaA-1q-61R" firstAttribute="leading" secondItem="PyP-qo-ffc" secondAttribute="leading" constant="8" id="hfZ-Sk-QhX"/>
-                                <constraint firstItem="DaA-1q-61R" firstAttribute="top" secondItem="PyP-qo-ffc" secondAttribute="top" constant="8" id="jcI-70-tmf"/>
-                                <constraint firstAttribute="bottom" secondItem="DaA-1q-61R" secondAttribute="bottom" constant="8" id="jpl-t8-Co5"/>
+                                <constraint firstItem="PBw-rw-wM0" firstAttribute="top" secondItem="PyP-qo-ffc" secondAttribute="top" constant="8" id="9K8-LN-hSp"/>
+                                <constraint firstAttribute="bottom" secondItem="PBw-rw-wM0" secondAttribute="bottom" constant="8" id="Cp3-YV-SuV"/>
+                                <constraint firstAttribute="trailing" secondItem="PBw-rw-wM0" secondAttribute="trailing" constant="8" id="I1Z-R0-yHw"/>
+                                <constraint firstItem="PBw-rw-wM0" firstAttribute="leading" secondItem="PyP-qo-ffc" secondAttribute="leading" constant="8" id="L06-ez-KXz"/>
                             </constraints>
                         </view>
                     </subviews>
