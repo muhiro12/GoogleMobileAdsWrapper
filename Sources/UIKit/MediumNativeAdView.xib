@@ -18,13 +18,13 @@
                     <rect key="frame" x="0.0" y="0.0" width="360" height="320"/>
                     <subviews>
                         <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="kJf-j7-QN4">
-                            <rect key="frame" x="0.0" y="0.0" width="360" height="86.5"/>
+                            <rect key="frame" x="0.0" y="0.0" width="360" height="90"/>
                             <subviews>
-                                <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="S2N-F8-kO0">
-                                    <rect key="frame" x="8" y="8" width="344" height="70.5"/>
+                                <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" distribution="fillProportionally" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="S2N-F8-kO0">
+                                    <rect key="frame" x="8" y="8" width="344" height="74"/>
                                     <subviews>
-                                        <stackView opaque="NO" contentMode="scaleToFill" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="Lcq-t4-xWF">
-                                            <rect key="frame" x="0.0" y="0.0" width="344" height="16"/>
+                                        <stackView opaque="NO" contentMode="scaleToFill" alignment="top" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="Lcq-t4-xWF">
+                                            <rect key="frame" x="0.0" y="0.0" width="344" height="19.5"/>
                                             <subviews>
                                                 <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Ad" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="7jz-sX-889">
                                                     <rect key="frame" x="0.0" y="0.0" width="16" height="16"/>
@@ -38,15 +38,15 @@
                                                     <nil key="highlightedColor"/>
                                                 </label>
                                                 <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Advertiser" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Sfy-1o-5ub">
-                                                    <rect key="frame" x="24" y="0.0" width="320" height="16"/>
+                                                    <rect key="frame" x="24" y="0.0" width="320" height="19.5"/>
                                                     <fontDescription key="fontDescription" style="UICTFontTextStyleCallout"/>
                                                     <nil key="textColor"/>
                                                     <nil key="highlightedColor"/>
                                                 </label>
                                             </subviews>
                                         </stackView>
-                                        <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="0i5-3k-IZs">
-                                            <rect key="frame" x="0.0" y="24" width="344" height="46.5"/>
+                                        <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" distribution="fillProportionally" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="0i5-3k-IZs">
+                                            <rect key="frame" x="0.0" y="27.5" width="344" height="46.5"/>
                                             <subviews>
                                                 <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="Headline" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsLetterSpacingToFitWidth="YES" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Q3B-9m-aNB">
                                                     <rect key="frame" x="0.0" y="0.0" width="344" height="20.5"/>
@@ -74,7 +74,7 @@
                             </constraints>
                         </view>
                         <imageView clipsSubviews="YES" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="4EE-vf-FJM" customClass="GADMediaView">
-                            <rect key="frame" x="0.0" y="86.5" width="360" height="185.5"/>
+                            <rect key="frame" x="0.0" y="90" width="360" height="182"/>
                             <constraints>
                                 <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="120" id="532-s6-gb4"/>
                                 <constraint firstAttribute="height" relation="greaterThanOrEqual" constant="120" id="9av-dX-RWk"/>
