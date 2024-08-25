@@ -39,11 +39,6 @@ final class NativeAdView: UIView {
         loader.delegate = self
         loader.load(GADRequest())
         self.loader = loader
-
-        if let button = view.callToActionView {
-            button.layer.cornerRadius = button.frame.height / 2
-            button.layer.masksToBounds = true
-        }
     }
 
     @available(*, unavailable)
@@ -62,9 +57,10 @@ extension NativeAdView: GADNativeAdLoaderDelegate {
         }
 
         (view?.headlineView as? UILabel)?.text = nativeAd.headline
-        (view?.callToActionView as? UILabel)?.text = nativeAd.callToAction
         (view?.bodyView as? UILabel)?.text = nativeAd.body
         (view?.advertiserView as? UILabel)?.text = nativeAd.advertiser
+        (view?.iconView as? UIImageView)?.image = nativeAd.icon?.image
+        (view?.callToActionView as? UIButton)?.titleLabel?.text = nativeAd.callToAction
         view?.mediaView?.mediaContent = nativeAd.mediaContent
         view?.nativeAd = nativeAd
 

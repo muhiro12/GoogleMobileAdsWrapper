@@ -12,20 +12,15 @@ enum NativeAdSize: String {
     case medium = "Medium"
 
     var width: CGFloat {
-        switch self {
-        case .small:
-            360
-        case .medium:
-            360
-        }
+        16 * 20
     }
 
     var height: CGFloat {
         switch self {
         case .small:
-            120
+            16 * 3
         case .medium:
-            320
+            16 * 18
         }
     }
 }
