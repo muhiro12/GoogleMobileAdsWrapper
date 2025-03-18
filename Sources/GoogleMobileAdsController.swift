@@ -16,7 +16,7 @@ public final class GoogleMobileAdsController {
     }
 
     public func start() {
-        GADMobileAds.sharedInstance().start()
+        MobileAds.shared.start()
     }
 
     @ViewBuilder

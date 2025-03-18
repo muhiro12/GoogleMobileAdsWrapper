@@ -9,14 +9,14 @@
 import GoogleMobileAds
 
 final class NativeAdView: UIView {
-    private var loader: GADAdLoader?
-    private var view: GADNativeAdView?
+    private var loader: GoogleMobileAds.AdLoader?
+    private var view: GoogleMobileAds.NativeAdView?
 
     init(adUnitID: String, size: NativeAdSize) {
         super.init(frame: .zero)
 
         guard let view = UINib(nibName: size.rawValue + String(describing: type(of: self)), bundle: .module)
-                .instantiate(withOwner: self, options: nil).first as? GADNativeAdView
+                .instantiate(withOwner: self, options: nil).first as? GoogleMobileAds.NativeAdView
         else {
             assertionFailure("Failed to init GADNativeAdView")
             return
@@ -30,14 +30,14 @@ final class NativeAdView: UIView {
             .windows
             .first?
             .rootViewController
-        let loader = GADAdLoader(
+        let loader = GoogleMobileAds.AdLoader(
             adUnitID: adUnitID,
             rootViewController: rootVC,
             adTypes: [.native],
             options: nil
         )
         loader.delegate = self
-        loader.load(GADRequest())
+        loader.load(GoogleMobileAds.Request())
         self.loader = loader
 
         if let iconView = view.iconView {
@@ -52,8 +52,8 @@ final class NativeAdView: UIView {
     }
 }
 
-extension NativeAdView: GADNativeAdLoaderDelegate {
-    func adLoader(_ adLoader: GADAdLoader, didReceive nativeAd: GADNativeAd) {
+extension NativeAdView: GoogleMobileAds.NativeAdLoaderDelegate {
+    func adLoader(_ adLoader: GoogleMobileAds.AdLoader, didReceive nativeAd: GoogleMobileAds.NativeAd) {
         if let mediaView = view?.mediaView {
             mediaView.widthAnchor
                 .constraint(equalTo: mediaView.heightAnchor,
@@ -72,7 +72,7 @@ extension NativeAdView: GADNativeAdLoaderDelegate {
         view?.isHidden = false
     }
 
-    func adLoader(_ adLoader: GADAdLoader, didFailToReceiveAdWithError error: Error) {
+    func adLoader(_ adLoader: GoogleMobileAds.AdLoader, didFailToReceiveAdWithError error: Error) {
         view?.isHidden = true
     }
 }
