@@ -8,7 +8,7 @@
 import SwiftUI
 
 private struct AdUnitIDEnvironmentKey: EnvironmentKey {
-    static var defaultValue = DemoAdUnitID.nativeAdvanced.rawValue
+    static let defaultValue = DemoAdUnitID.nativeAdvanced.rawValue
 }
 
 extension EnvironmentValues {

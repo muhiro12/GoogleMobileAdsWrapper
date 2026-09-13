@@ -1,10 +1,13 @@
 import GoogleMobileAds
 import UIKit
 import XCTest
+
 @testable import GoogleMobileAdsWrapper
 
 @MainActor
 final class NativeAdViewTests: XCTestCase {
+    private var windows: [UIWindow] = []
+
     func testContentFollowsContainerResizing() throws {
         for size in [NativeAdSize.small, .medium] {
             let (container, _) = makeView(size: size)
@@ -69,10 +72,11 @@ final class NativeAdViewTests: XCTestCase {
             ad.stubCallToAction = "Learn more"
             ad.stubBody = "A longer description verifies that the ad copy stays inside its card."
             ad.stubAdvertiser = "Example advertiser"
-            ad.stubIcon = .init(image: UIGraphicsImageRenderer(size: .init(width: 48, height: 48)).image { context in
-                UIColor.systemBlue.setFill()
-                context.fill(.init(x: 0, y: 0, width: 48, height: 48))
-            })
+            ad.stubIcon = .init(
+                image: UIGraphicsImageRenderer(size: .init(width: 48, height: 48)).image { context in
+                    UIColor.systemBlue.setFill()
+                    context.fill(.init(x: 0, y: 0, width: 48, height: 48))
+                })
             container.adLoader(loader, didReceive: ad)
             let button = try XCTUnwrap(content.callToActionView as? UIButton)
             XCTAssertEqual(button.configuration?.title, "Learn more")
@@ -92,6 +96,145 @@ final class NativeAdViewTests: XCTestCase {
         }
     }
 
+    func testLoadingWaitsForAnOwningWindowAndUsesItsController() {
+        var suppliedController: UIViewController?
+        let loader = makeLoader()
+        let container = GoogleMobileAdsWrapper.NativeAdView(
+            adUnitID: "test-unit",
+            size: .small,
+            makeAdLoader: { _, controller in
+                suppliedController = controller
+                return loader
+            }
+        )
+        container.update(adUnitID: "test-unit", size: .small)
+        XCTAssertEqual(loader.loadCount, 0)
+        XCTAssertNil(suppliedController)
+        let controller = attach(container)
+        XCTAssertTrue(suppliedController === controller)
+        XCTAssertEqual(loader.loadCount, 1)
+        container.update(adUnitID: "test-unit", size: .small)
+        XCTAssertEqual(loader.loadCount, 1)
+    }
+
+    func testMovingWindowsUpdatesPresentationWithoutReloading() {
+        let (container, loader) = makeView(size: .small)
+        let ad = StubNativeAd()
+        container.adLoader(loader, didReceive: ad)
+        XCTAssertTrue(ad.rootViewController === container.window?.rootViewController)
+        container.removeFromSuperview()
+        XCTAssertNil(ad.rootViewController)
+        let controller = attach(container)
+        XCTAssertTrue(ad.rootViewController === controller)
+        XCTAssertEqual(loader.loadCount, 1)
+    }
+
+    func testSizeChangeReusesTheLoadedAdInTheNewLayout() throws {
+        let (container, loader) = makeView(size: .small)
+        let originalContent = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let ad = StubNativeAd()
+        container.adLoader(loader, didReceive: ad)
+        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, size: .medium)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        XCTAssertFalse(content === originalContent)
+        XCTAssertNil(originalContent.nativeAd)
+        XCTAssertNotNil(content.mediaView)
+        XCTAssertTrue(content.nativeAd === ad)
+        XCTAssertEqual(loader.loadCount, 1)
+        XCTAssertEqual(container.subviews.count, 1)
+    }
+
+    func testAdUnitChangeIgnoresOldSuccessAndFailureCallbacks() throws {
+        var loaders: [StubAdLoader] = []
+        var requestedAdUnitIDs: [String] = []
+        let container = GoogleMobileAdsWrapper.NativeAdView(
+            adUnitID: "first-unit",
+            size: .small,
+            makeAdLoader: { adUnitID, _ in
+                requestedAdUnitIDs.append(adUnitID)
+                let loader = StubAdLoader(
+                    adUnitID: adUnitID, rootViewController: nil, adTypes: [.native], options: nil
+                )
+                loaders.append(loader)
+                return loader
+            }
+        )
+        attach(container)
+        let firstLoader = try XCTUnwrap(loaders.first)
+        container.update(adUnitID: "second-unit", size: .small)
+        XCTAssertEqual(requestedAdUnitIDs, ["first-unit", "second-unit"])
+        XCTAssertNil(firstLoader.delegate)
+        let secondLoader = try XCTUnwrap(loaders.last)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let newAd = StubNativeAd()
+        container.adLoader(secondLoader, didReceive: newAd)
+        container.adLoader(firstLoader, didReceive: StubNativeAd())
+        container.adLoader(firstLoader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        XCTAssertTrue(content.nativeAd === newAd)
+        XCTAssertFalse(content.isHidden)
+    }
+
+    func testDismantleDiscardsPendingCallbacksAndReleasesPresentation() throws {
+        let (container, loader) = makeView(size: .small)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let ad = StubNativeAd()
+        container.adLoader(loader, didReceive: ad)
+        NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
+        XCTAssertNil(loader.delegate)
+        XCTAssertNil(ad.rootViewController)
+        XCTAssertNil(content.nativeAd)
+        XCTAssertTrue(content.isHidden)
+        container.adLoader(loader, didReceive: StubNativeAd())
+        XCTAssertNil(content.nativeAd)
+        XCTAssertTrue(content.isHidden)
+    }
+
+    func testFailedRequestDoesNotRetryOnUnchangedSwiftUIUpdates() throws {
+        let (container, loader) = makeView(size: .small)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        for _ in 0..<3 {
+            container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, size: .small)
+        }
+        XCTAssertEqual(loader.loadCount, 1)
+        XCTAssertNil(content.nativeAd)
+        XCTAssertTrue(content.isHidden)
+    }
+
+    func testSynchronousLoaderCallbackIsAccepted() throws {
+        let loader = makeLoader()
+        let ad = StubNativeAd()
+        loader.onLoad = { loader in
+            (loader.delegate as? GoogleMobileAds.NativeAdLoaderDelegate)?.adLoader(loader, didReceive: ad)
+        }
+        let container = GoogleMobileAdsWrapper.NativeAdView(
+            adUnitID: "test-unit",
+            size: .small,
+            makeAdLoader: { _, _ in
+                loader
+            }
+        )
+        attach(container)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        XCTAssertTrue(content.nativeAd === ad)
+        XCTAssertFalse(content.isHidden)
+    }
+
+    private func makeLoader() -> StubAdLoader {
+        .init(adUnitID: "test-unit", rootViewController: nil, adTypes: [.native], options: nil)
+    }
+
+    @discardableResult
+    private func attach(_ view: UIView) -> UIViewController {
+        let controller = UIViewController()
+        controller.view.addSubview(view)
+        let window = UIWindow(frame: .init(x: 0, y: 0, width: 400, height: 800))
+        window.rootViewController = controller
+        window.isHidden = false
+        windows.append(window)
+        return controller
+    }
+
     private func makeView(size: NativeAdSize) -> (GoogleMobileAdsWrapper.NativeAdView, StubAdLoader) {
         let loader = StubAdLoader(
             adUnitID: DemoAdUnitID.nativeAdvanced.rawValue,
@@ -106,6 +249,7 @@ final class NativeAdViewTests: XCTestCase {
                 loader
             }
         )
+        attach(view)
         return (view, loader)
     }
 }
@@ -113,9 +257,11 @@ final class NativeAdViewTests: XCTestCase {
 @MainActor
 final class StubAdLoader: GoogleMobileAds.AdLoader {
     private(set) var loadCount = 0
+    var onLoad: ((StubAdLoader) -> Void)?
 
     override func load(_ request: GoogleMobileAds.Request?) {
         loadCount += 1
+        onLoad?(self)
     }
 }
 

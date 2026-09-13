@@ -21,3 +21,17 @@ during development.
 
 SDK upgrades follow Google's [release notes](https://developers.google.com/admob/ios/rel-notes)
 and [migration guide](https://developers.google.com/admob/ios/migration).
+
+## Loading behavior
+
+Ads load when their view is attached to a window. Changing the ad unit ID starts
+a new request; changing only the size reuses the loaded ad. Removing the SwiftUI
+view disconnects pending callbacks. Failed requests remain hidden and are logged
+under the `GoogleMobileAdsWrapper` subsystem without automatic retry loops.
+
+## Tests
+
+Open `Package.swift` in Xcode and run the `GoogleMobileAdsWrapper` scheme on an
+iOS Simulator. The tests use stub loaders and fixture assets without requesting
+ads. Their image attachments verify layout; live ad delivery still needs a host
+app configured with Google's test application ID and native ad unit ID.

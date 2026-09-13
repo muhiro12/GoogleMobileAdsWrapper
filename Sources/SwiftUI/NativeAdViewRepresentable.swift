@@ -18,11 +18,17 @@ struct NativeAdViewRepresentable {
 }
 
 extension NativeAdViewRepresentable: UIViewRepresentable {
-    func makeUIView(context: Context) -> some UIView {
+    func makeUIView(context: Context) -> NativeAdView {
         NativeAdView(adUnitID: adUnitID, size: size)
     }
 
-    func updateUIView(_ uiView: UIViewType, context: Context) {}
+    func updateUIView(_ uiView: NativeAdView, context: Context) {
+        uiView.update(adUnitID: adUnitID, size: size)
+    }
+
+    static func dismantleUIView(_ uiView: NativeAdView, coordinator: ()) {
+        uiView.cancelLoading()
+    }
 }
 
 #Preview {
