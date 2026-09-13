@@ -70,7 +70,7 @@
                                 <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="l0V-Fw-pJe">
                                     <rect key="frame" x="0.0" y="0.0" width="48" height="48"/>
                                     <constraints>
-                                        <constraint firstAttribute="width" constant="48" id="Xo4-Sb-53G"/>
+                                        <constraint firstAttribute="width" constant="48" priority="999" id="Xo4-Sb-53G"/>
                                         <constraint firstAttribute="width" secondItem="l0V-Fw-pJe" secondAttribute="height" id="aOB-6S-rTg"/>
                                     </constraints>
                                 </imageView>
@@ -80,7 +80,7 @@
                                     <color key="textColor" systemColor="secondaryLabelColor"/>
                                     <nil key="highlightedColor"/>
                                 </label>
-                                <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="jvt-XE-oAU">
+                                <button opaque="NO" userInteractionEnabled="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="jvt-XE-oAU">
                                     <rect key="frame" x="164" y="10" width="156" height="28"/>
                                     <state key="normal" title="Button"/>
                                     <buttonConfiguration key="configuration" style="filled" title="Button" buttonSize="mini"/>

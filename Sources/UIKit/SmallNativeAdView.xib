@@ -21,7 +21,7 @@
                             <rect key="frame" x="0.0" y="8" width="48" height="48"/>
                             <constraints>
                                 <constraint firstAttribute="width" secondItem="MW8-6h-4bX" secondAttribute="height" id="vjD-Jz-i5D"/>
-                                <constraint firstAttribute="width" constant="48" id="y12-0i-xYH"/>
+                                <constraint firstAttribute="width" constant="48" priority="999" id="y12-0i-xYH"/>
                             </constraints>
                         </imageView>
                         <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" translatesAutoresizingMaskIntoConstraints="NO" id="HF1-Y0-Ygw">
@@ -60,7 +60,7 @@
                                 </view>
                             </subviews>
                         </stackView>
-                        <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="DVD-7c-gOs">
+                        <button opaque="NO" userInteractionEnabled="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="DVD-7c-gOs">
                             <rect key="frame" x="220" y="18" width="100" height="28"/>
                             <state key="normal" title="Button"/>
                             <buttonConfiguration key="configuration" style="filled" title="Button" buttonSize="mini"/>

@@ -24,7 +24,12 @@ let package = Package(
             name: "GoogleMobileAdsWrapper",
             dependencies: [
                 .product(name: "GoogleMobileAds", package: "swift-package-manager-google-mobile-ads")
-            ]
+            ],
+            path: "Sources"
+        ),
+        .testTarget(
+            name: "GoogleMobileAdsWrapperTests",
+            dependencies: ["GoogleMobileAdsWrapper"]
         )
     ]
 )
