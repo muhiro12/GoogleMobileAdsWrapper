@@ -26,8 +26,9 @@ and [migration guide](https://developers.google.com/admob/ios/migration).
 
 Ads load when their view is attached to a window. Changing the ad unit ID starts
 a new request; changing only the size reuses the loaded ad. Removing the SwiftUI
-view disconnects pending callbacks. Failed requests remain hidden and are logged
-under the `GoogleMobileAdsWrapper` subsystem without automatic retry loops.
+view disconnects pending callbacks and permanently stops requests for that view
+instance, including during later UIKit reattachment. Failed requests remain
+hidden and are logged under the `GoogleMobileAdsWrapper` subsystem without automatic retry loops.
 
 ## Tests
 

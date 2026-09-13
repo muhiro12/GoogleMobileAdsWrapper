@@ -14,6 +14,7 @@ final class NativeAdView: UIView {
 
     private var adUnitID: String
     private var size: NativeAdSize
+    private var isDismantled = false
     private let makeAdLoader: (String, UIViewController?) -> GoogleMobileAds.AdLoader
     private var loader: GoogleMobileAds.AdLoader?
     private var view: GoogleMobileAds.NativeAdView?
@@ -65,6 +66,9 @@ final class NativeAdView: UIView {
     }
 
     func update(adUnitID: String, size: NativeAdSize) {
+        guard isDismantled == false else {
+            return
+        }
         if self.adUnitID != adUnitID {
             cancelLoading()
             self.adUnitID = adUnitID
@@ -83,7 +87,12 @@ final class NativeAdView: UIView {
         loadAdIfNeeded()
     }
 
-    func cancelLoading() {
+    func dismantle() {
+        isDismantled = true
+        cancelLoading()
+    }
+
+    private func cancelLoading() {
         loader?.delegate = nil
         loader = nil
         view?.nativeAd?.rootViewController = nil
@@ -117,7 +126,7 @@ final class NativeAdView: UIView {
     }
 
     private func loadAdIfNeeded() {
-        guard loader == nil, let controller = presentingViewController else {
+        guard isDismantled == false, loader == nil, let controller = presentingViewController else {
             return
         }
         let loader = makeAdLoader(adUnitID, controller)

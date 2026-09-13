@@ -189,6 +189,20 @@ final class NativeAdViewTests: XCTestCase {
         XCTAssertTrue(content.isHidden)
     }
 
+    func testDismantledViewCannotRestartLoadingWhenReattached() throws {
+        let (container, loader) = makeView(size: .small)
+        NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
+        container.removeFromSuperview()
+        attach(container)
+        container.update(adUnitID: "replacement-unit", size: .medium)
+
+        XCTAssertEqual(loader.loadCount, 1)
+        XCTAssertNil(loader.delegate)
+        let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        XCTAssertNil(content.nativeAd)
+        XCTAssertTrue(content.isHidden)
+    }
+
     func testFailedRequestDoesNotRetryOnUnchangedSwiftUIUpdates() throws {
         let (container, loader) = makeView(size: .small)
         let content = try XCTUnwrap(container.subviews.first as? GoogleMobileAds.NativeAdView)

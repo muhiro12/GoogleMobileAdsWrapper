@@ -27,7 +27,7 @@ extension NativeAdViewRepresentable: UIViewRepresentable {
     }
 
     static func dismantleUIView(_ uiView: NativeAdView, coordinator: ()) {
-        uiView.cancelLoading()
+        uiView.dismantle()
     }
 }
 
