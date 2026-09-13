@@ -11,7 +11,12 @@ A SwiftUI adapter for Google Mobile Ads native ads on iOS 17 and later.
 
 Create a `GoogleMobileAdsController` with your native ad unit ID. Call `start()`
 once the app has completed any required consent flow, then display
-`controller.buildNativeAd("Small")` or `controller.buildNativeAd("Medium")`.
+`controller.buildNativeAd(.small)` or `controller.buildNativeAd(.medium)`.
+`NativeAdSize` is a public `Sendable` enum, so adapter packages can map their own
+size types to it without duplicating string identifiers.
+
+The existing `buildNativeAd("Small")` and `buildNativeAd("Medium")` calls remain
+supported. Unknown string identifiers continue to produce an empty view.
 
 The app owns consent, ATT, ad placement, and subscription policy. Configure
 `GADApplicationIdentifier` and the applicable `SKAdNetworkItems` in the app's

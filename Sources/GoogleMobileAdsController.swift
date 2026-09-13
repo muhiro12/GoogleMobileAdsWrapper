@@ -20,11 +20,17 @@ public final class GoogleMobileAdsController {
         MobileAds.shared.start()
     }
 
+    /// Builds a native ad using one of the supported layouts.
+    public func buildNativeAd(_ size: NativeAdSize) -> some View {
+        NativeAd(size: size)
+            .environment(\.adUnitID, adUnitID)
+    }
+
+    /// Builds a native ad from a legacy layout ID, or no view if the ID is unknown.
     @ViewBuilder
     public func buildNativeAd(_ sizeID: String) -> some View {
         if let size = NativeAdSize(rawValue: sizeID) {
-            NativeAd(size: size)
-                .environment(\.adUnitID, adUnitID)
+            buildNativeAd(size)
         }
     }
 }
