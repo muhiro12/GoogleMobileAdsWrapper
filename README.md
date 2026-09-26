@@ -10,7 +10,8 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Usage
 
-On the main actor, create a `GoogleMobileAdsController` with your native ad unit ID. Call `start()`
+On the main actor, create a `GoogleMobileAdsController` with your native ad
+unit ID. Call `start()`
 once the app has completed any required consent flow, then display
 `controller.buildNativeAd(.small)` or `controller.buildNativeAd(.medium)`.
 `NativeAdSize` is a public `Sendable` enum, so adapter packages can map their own
@@ -122,9 +123,58 @@ instance, including during later UIKit reattachment. Failed requests remain
 hidden and are logged under the `GoogleMobileAdsWrapper` subsystem without
 automatic retry loops.
 
+## Native ad presentation
+
+Both layouts include a localized ad attribution badge (English and Japanese)
+and keep the top-right corner clear for the SDK's AdChoices overlay. Do not
+cover that area with app controls or make the card background a separate
+click target. Asset clicks and impressions remain managed by Google.
+
+A compact ad automatically uses the media layout when the response includes
+video or an accessibility text size is active. Media preserves its aspect ratio
+and at least a 120-point dimension;
+portrait creatives and larger text can increase the card height. Let SwiftUI
+size the view naturally rather than forcing the old 64/288-point heights.
+Headlines and body copy wrap, and system text styles support Dynamic Type.
+Verify placements against Google's
+[native ad requirements](https://support.google.com/admob/answer/6329638),
+including actual creative content and SDK-rendered AdChoices behavior.
+
+## Privacy and app responsibilities
+
+Google Mobile Ads and UMP include their own `PrivacyInfo.xcprivacy` files.
+The wrapper adds no independent data collection, tracking domains, persistent
+storage, or required-reason API use. It therefore does not duplicate those
+SDK declarations in a wrapper manifest. Reassess this when adding storage,
+analytics, or additional SDKs.
+
+Inspect the shipping app's archive privacy report, including any mediation
+SDKs, and reconcile it with App Store Connect disclosures and the app's
+privacy policy. SDK manifests do not replace that work. See Google's
+[data disclosure guide](https://developers.google.com/admob/ios/privacy/data-disclosure)
+and Apple's
+[privacy manifest documentation](https://developer.apple.com/documentation/bundleresources/privacy-manifest-files).
+
+Before requesting ads, the host must configure applicable child-directed,
+under-age, content-rating, consent, and ATT settings. The UMP under-age flag
+is separate from the advertising SDK's request configuration; this wrapper
+does not infer one from the other. When using mediation, follow Google's
+initialization guidance and wait for adapter initialization before loading.
+Account message setup, audience choices, app-ads.txt, regional applicability,
+and Store declarations remain host-app or publisher responsibilities.
+
+## Migration
+
+The package compiles in Swift 6 language mode. `GoogleMobileAdsController`
+is now explicitly main-actor isolated; create and use it from `@MainActor`
+code. Existing typed and string layout calls remain available. The actor
+requirement and variable card height need review at adopter call sites before
+upgrading.
+
 ## Tests
 
 Open `Package.swift` in Xcode and run the `GoogleMobileAdsWrapper` scheme on an
-iOS Simulator. The tests use stub loaders and fixture assets without requesting
+iOS Simulator. The Swift Testing suites use stub loaders and fixture assets
+without requesting
 ads. Their image attachments verify layout; live ad delivery still needs a host
 app configured with Google's test application ID and native ad unit ID.
