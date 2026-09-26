@@ -4,13 +4,13 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Requirements
 
-- Xcode 26.2 or later.
-- Google Mobile Ads SDK 13.9.0 or a compatible 13.x release.
+- Xcode 26.2 or later; Swift 6 language mode.
+- Google Mobile Ads SDK 13.10.0 or a compatible 13.x release.
 - Google UMP SDK 3.1.0 or a compatible 3.x release.
 
 ## Usage
 
-Create a `GoogleMobileAdsController` with your native ad unit ID. Call `start()`
+On the main actor, create a `GoogleMobileAdsController` with your native ad unit ID. Call `start()`
 once the app has completed any required consent flow, then display
 `controller.buildNativeAd(.small)` or `controller.buildNativeAd(.medium)`.
 `NativeAdSize` is a public `Sendable` enum, so adapter packages can map their own

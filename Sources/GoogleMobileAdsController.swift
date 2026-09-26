@@ -8,6 +8,7 @@
 import SwiftUI
 import GoogleMobileAds
 
+@MainActor
 @Observable
 public final class GoogleMobileAdsController {
     private let adUnitID: String
