@@ -1,21 +1,23 @@
+import Testing
 import UIKit
-import XCTest
 
 @testable import GoogleMobileAdsWrapper
 
 @MainActor
-final class GoogleMobileAdsConsentControllerTests: XCTestCase {
-    func testStateIsReadFromSDKRatherThanDerivedFromConsentStatus() {
+struct GoogleMobileAdsConsentControllerTests {
+    @Test
+    func `State is read from SDK rather than derived from consent status`() {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
-        XCTAssertFalse(controller.state.canRequestAds)
+        #expect(!controller.state.canRequestAds)
         client.state = .init(status: .required, canRequestAds: true, privacyOptionsRequirement: .required)
-        XCTAssertEqual(controller.state, client.state)
+        #expect(controller.state == client.state)
         client.state = .init(status: .obtained, canRequestAds: false, privacyOptionsRequirement: .notRequired)
-        XCTAssertFalse(controller.state.canRequestAds)
+        #expect(!controller.state.canRequestAds)
     }
 
-    func testUpdateForwardsConfigurationWithoutAutomaticallyPresentingAForm() async throws {
+    @Test
+    func `Update forwards configuration without automatically presenting a form`() async throws {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         let request = GoogleMobileAdsConsentRequest(
@@ -26,13 +28,14 @@ final class GoogleMobileAdsConsentControllerTests: XCTestCase {
 
         let state = try await controller.requestConsentInfoUpdate(request)
 
-        XCTAssertEqual(client.receivedRequest, request)
-        XCTAssertEqual(client.calls, ["update"])
-        XCTAssertEqual(state, client.nextState)
-        XCTAssertFalse(controller.isPerformingOperation)
+        #expect(client.receivedRequest == request)
+        #expect(client.calls == ["update"])
+        #expect(state == client.nextState)
+        #expect(!controller.isPerformingOperation)
     }
 
-    func testFormsForwardTheScenePresenterAndReturnUpdatedState() async throws {
+    @Test
+    func `Forms forward the scene presenter and return updated state`() async throws {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         let presenter = UIViewController()
@@ -40,51 +43,49 @@ final class GoogleMobileAdsConsentControllerTests: XCTestCase {
 
         let requiredFormState = try await controller.loadAndPresentIfRequired(from: presenter)
 
-        XCTAssertTrue(client.presenter === presenter)
-        XCTAssertTrue(requiredFormState.canRequestAds)
+        #expect(client.presenter === presenter)
+        #expect(requiredFormState.canRequestAds)
         client.nextState = .init(status: .required, canRequestAds: false, privacyOptionsRequirement: .required)
         let privacyState = try await controller.presentPrivacyOptions()
-        XCTAssertNil(client.presenter)
-        XCTAssertFalse(privacyState.canRequestAds)
-        XCTAssertEqual(client.calls, ["requiredForm", "privacyOptions"])
+        #expect(client.presenter == nil)
+        #expect(!privacyState.canRequestAds)
+        #expect(client.calls == ["requiredForm", "privacyOptions"])
     }
 
-    func testFailurePreservesSDKErrorAndPreviousEligibilityAndAllowsRetry() async throws {
+    @Test
+    func `Failure preserves SDK error and previous eligibility and allows retry`() async throws {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         let sdkError = NSError(domain: "TestUMP", code: 19, userInfo: [NSLocalizedDescriptionKey: "Offline"])
         client.error = sdkError
         client.nextState = .init(status: .obtained, canRequestAds: true, privacyOptionsRequirement: .required)
-        do {
+        await #expect(throws: sdkError) {
             try await controller.requestConsentInfoUpdate()
-            XCTFail("Expected SDK error")
-        } catch {
-            XCTAssertEqual(error as NSError, sdkError)
         }
-        XCTAssertTrue(controller.state.canRequestAds)
-        XCTAssertFalse(controller.isPerformingOperation)
+        #expect(controller.state.canRequestAds)
+        #expect(!controller.isPerformingOperation)
         client.error = nil
         try await controller.requestConsentInfoUpdate()
-        XCTAssertEqual(client.calls, ["update", "update"])
+        #expect(client.calls == ["update", "update"])
     }
 
-    func testFormFailureLeavesFreshSDKStateAvailable() async {
+    @Test
+    func `Form failure leaves fresh SDK state available`() async {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         client.state = .init(status: .obtained, canRequestAds: true, privacyOptionsRequirement: .required)
         client.nextState = .init(status: .required, canRequestAds: false, privacyOptionsRequirement: .required)
-        client.error = NSError(domain: "TestUMP", code: 3)
-        do {
+        let sdkError = NSError(domain: "TestUMP", code: 3)
+        client.error = sdkError
+        await #expect(throws: sdkError) {
             try await controller.presentPrivacyOptions()
-            XCTFail("Expected form error")
-        } catch {
-            XCTAssertEqual((error as NSError).code, 3)
         }
-        XCTAssertFalse(controller.state.canRequestAds)
-        XCTAssertFalse(controller.isPerformingOperation)
+        #expect(!controller.state.canRequestAds)
+        #expect(!controller.isPerformingOperation)
     }
 
-    func testConcurrentOperationsAreRejectedUntilSDKCompletes() async throws {
+    @Test
+    func `Concurrent operations are rejected until SDK completes`() async throws {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         client.suspends = true
@@ -92,26 +93,21 @@ final class GoogleMobileAdsConsentControllerTests: XCTestCase {
             try await controller.loadAndPresentIfRequired()
         }
         await client.waitUntilSuspended()
-        XCTAssertTrue(controller.isPerformingOperation)
-        do {
+        #expect(controller.isPerformingOperation)
+        await #expect(throws: GoogleMobileAdsConsentController.OperationError.operationInProgress) {
             try await controller.requestConsentInfoUpdate()
-            XCTFail("Expected busy error")
-        } catch {
-            XCTAssertEqual(error as? GoogleMobileAdsConsentController.OperationError, .operationInProgress)
         }
-        do {
+        await #expect(throws: GoogleMobileAdsConsentController.OperationError.operationInProgress) {
             try await controller.presentPrivacyOptions()
-            XCTFail("Expected busy error")
-        } catch {
-            XCTAssertEqual(error as? GoogleMobileAdsConsentController.OperationError, .operationInProgress)
         }
-        XCTAssertEqual(client.calls, ["requiredForm"])
+        #expect(client.calls == ["requiredForm"])
         client.finish()
         _ = try await operation.value
-        XCTAssertFalse(controller.isPerformingOperation)
+        #expect(!controller.isPerformingOperation)
     }
 
-    func testCancelledTaskDoesNotStartSDKWork() async {
+    @Test
+    func `Cancelled task does not start SDK work`() async {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         let operation = Task { @MainActor in
@@ -120,17 +116,15 @@ final class GoogleMobileAdsConsentControllerTests: XCTestCase {
             }
             return try await controller.requestConsentInfoUpdate()
         }
-        do {
+        await #expect(throws: CancellationError.self) {
             _ = try await operation.value
-            XCTFail("Expected cancellation")
-        } catch {
-            XCTAssertTrue(error is CancellationError)
         }
-        XCTAssertTrue(client.calls.isEmpty)
-        XCTAssertFalse(controller.isPerformingOperation)
+        #expect(client.calls.isEmpty)
+        #expect(!controller.isPerformingOperation)
     }
 
-    func testCancellationKeepsGateUntilSDKFinishesAndDoesNotCacheEligibility() async {
+    @Test
+    func `Cancellation keeps gate until SDK finishes and does not cache eligibility`() async {
         let client = ConsentClientStub()
         let controller = GoogleMobileAdsConsentController(client: client)
         client.suspends = true
@@ -140,21 +134,15 @@ final class GoogleMobileAdsConsentControllerTests: XCTestCase {
         }
         await client.waitUntilSuspended()
         operation.cancel()
-        XCTAssertTrue(controller.isPerformingOperation)
-        do {
+        #expect(controller.isPerformingOperation)
+        await #expect(throws: GoogleMobileAdsConsentController.OperationError.operationInProgress) {
             try await controller.presentPrivacyOptions()
-            XCTFail("Cancelled SDK work must retain its gate")
-        } catch {
-            XCTAssertEqual(error as? GoogleMobileAdsConsentController.OperationError, .operationInProgress)
         }
         client.finish()
-        do {
+        await #expect(throws: CancellationError.self) {
             _ = try await operation.value
-            XCTFail("Expected cancellation after SDK completion")
-        } catch {
-            XCTAssertTrue(error is CancellationError)
         }
-        XCTAssertFalse(controller.isPerformingOperation)
-        XCTAssertTrue(controller.state.canRequestAds)
+        #expect(!controller.isPerformingOperation)
+        #expect(controller.state.canRequestAds)
     }
 }

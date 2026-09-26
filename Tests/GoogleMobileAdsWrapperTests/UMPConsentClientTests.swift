@@ -1,18 +1,20 @@
+import Testing
 import UserMessagingPlatform
-import XCTest
 
 @testable import GoogleMobileAdsWrapper
 
 @MainActor
-final class UMPConsentClientTests: XCTestCase {
-    func testProductionDefaultsDoNotAddDebugOrCrossAppConsentSettings() {
+struct UMPConsentClientTests {
+    @Test
+    func `Production defaults do not add debug or cross app consent settings`() {
         let parameters = UMPConsentClient.parameters(for: .init())
-        XCTAssertFalse(parameters.isTaggedForUnderAgeOfConsent)
-        XCTAssertNil(parameters.debugSettings)
-        XCTAssertNil(parameters.consentSyncID)
+        #expect(!parameters.isTaggedForUnderAgeOfConsent)
+        #expect(parameters.debugSettings == nil)
+        #expect(parameters.consentSyncID == nil)
     }
 
-    func testExplicitDebugSettingsAndUnderAgeFlagReachSDK() {
+    @Test
+    func `Explicit debug settings and under age flag reach SDK`() {
         let cases: [(GoogleMobileAdsConsentRequest.DebugSettings.Geography, DebugGeography)] = [
             (.disabled, .disabled), (.eea, .EEA), (.regulatedUSState, .regulatedUSState), (.other, .other)
         ]
@@ -21,20 +23,21 @@ final class UMPConsentClientTests: XCTestCase {
                 isTaggedForUnderAgeOfConsent: true,
                 debugSettings: .init(geography: geography, testDeviceIdentifiers: ["test-device"])
             ))
-            XCTAssertTrue(parameters.isTaggedForUnderAgeOfConsent)
-            XCTAssertEqual(parameters.debugSettings?.geography, sdkGeography)
-            XCTAssertEqual(parameters.debugSettings?.testDeviceIdentifiers, ["test-device"])
-            XCTAssertNil(parameters.consentSyncID)
+            #expect(parameters.isTaggedForUnderAgeOfConsent)
+            #expect(parameters.debugSettings?.geography == sdkGeography)
+            #expect(parameters.debugSettings?.testDeviceIdentifiers == ["test-device"])
+            #expect(parameters.consentSyncID == nil)
         }
     }
 
-    func testSDKStatusMappingPreservesAllKnownStates() {
-        XCTAssertEqual(UMPConsentClient.status(.unknown), .unknown)
-        XCTAssertEqual(UMPConsentClient.status(.required), .required)
-        XCTAssertEqual(UMPConsentClient.status(.notRequired), .notRequired)
-        XCTAssertEqual(UMPConsentClient.status(.obtained), .obtained)
-        XCTAssertEqual(UMPConsentClient.privacyOptions(.unknown), .unknown)
-        XCTAssertEqual(UMPConsentClient.privacyOptions(.required), .required)
-        XCTAssertEqual(UMPConsentClient.privacyOptions(.notRequired), .notRequired)
+    @Test
+    func `SDK status mapping preserves all known states`() {
+        #expect(UMPConsentClient.status(.unknown) == .unknown)
+        #expect(UMPConsentClient.status(.required) == .required)
+        #expect(UMPConsentClient.status(.notRequired) == .notRequired)
+        #expect(UMPConsentClient.status(.obtained) == .obtained)
+        #expect(UMPConsentClient.privacyOptions(.unknown) == .unknown)
+        #expect(UMPConsentClient.privacyOptions(.required) == .required)
+        #expect(UMPConsentClient.privacyOptions(.notRequired) == .notRequired)
     }
 }
