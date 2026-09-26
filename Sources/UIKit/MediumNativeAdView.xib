@@ -22,6 +22,7 @@
                             <constraints>
                                 <constraint firstAttribute="width" relation="greaterThanOrEqual" constant="120" id="532-s6-gb4"/>
                                 <constraint firstAttribute="height" relation="greaterThanOrEqual" constant="120" id="9av-dX-RWk"/>
+                                <constraint firstAttribute="height" constant="160" priority="249" id="media-preferred-height"/>
                             </constraints>
                         </imageView>
                         <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" translatesAutoresizingMaskIntoConstraints="NO" id="AhJ-Sc-SQg">
@@ -44,12 +45,7 @@
                                     <color key="textColor" systemColor="secondaryLabelColor"/>
                                     <nil key="highlightedColor"/>
                                 </label>
-                                <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="U57-lc-nsI">
-                                    <rect key="frame" x="0.0" y="32.5" width="320" height="31.5"/>
-                                </view>
                             </subviews>
-                            <constraints>
-                            </constraints>
                         </stackView>
                         <stackView opaque="NO" contentMode="scaleToFill" alignment="center" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="Lcq-t4-xWF">
                             <rect key="frame" x="0.0" y="240" width="320" height="48"/>
@@ -73,8 +69,6 @@
                                     <buttonConfiguration key="configuration" style="filled" title="Button" buttonSize="mini"/>
                                 </button>
                             </subviews>
-                            <constraints>
-                            </constraints>
                         </stackView>
                     </subviews>
                 </stackView>

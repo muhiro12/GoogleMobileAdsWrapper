@@ -9,6 +9,24 @@ final class NativeAdViewTests {
     private var windows: [UIWindow] = []
 
     @Test
+    func mediumNibHasUnambiguousLayoutBeforeReceivingAnAd() throws {
+        let content = try #require(
+            UINib(nibName: "MediumNativeAdView", bundle: .module)
+                .instantiate(withOwner: nil, options: nil).first as? GoogleMobileAds.NativeAdView
+        )
+        for height in [CGFloat(288), 320, 480] {
+            content.frame = .init(x: 0, y: 0, width: 320, height: height)
+            content.setNeedsLayout()
+            content.layoutIfNeeded()
+            var pending = [content as UIView]
+            while let view = pending.popLast() {
+                #expect(!view.hasAmbiguousLayout, "Ambiguous layout in \(type(of: view))")
+                pending.append(contentsOf: view.subviews)
+            }
+        }
+    }
+
+    @Test
     func contentFollowsContainerResizing() throws {
         for size in [NativeAdSize.small, .medium] {
             let (container, _) = makeView(size: size)
