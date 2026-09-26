@@ -26,6 +26,10 @@ extension NativeAdViewRepresentable: UIViewRepresentable {
         uiView.update(adUnitID: adUnitID, size: size)
     }
 
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: NativeAdView, context: Context) -> CGSize? {
+        uiView.fittingSize(width: min(proposal.width ?? size.width, size.width))
+    }
+
     static func dismantleUIView(_ uiView: NativeAdView, coordinator: ()) {
         uiView.dismantle()
     }
