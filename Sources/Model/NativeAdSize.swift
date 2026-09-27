@@ -7,23 +7,21 @@
 
 import Foundation
 
-/// Supported native ad layouts. Raw values also identify the legacy string API.
+/// Native ad layouts from the 1.x API. Raw values also identify the legacy string API.
+@available(*, deprecated, message: "Use NativeAdLayout with NativeAdView(adUnitID:layout:).")
 public enum NativeAdSize: String, CaseIterable, Sendable {
-    /// Compact card that expands for video or accessibility text sizes.
+    /// Maps to ``NativeAdLayout/compact``.
     case small = "Small"
-    /// Card with a media region above the native ad assets.
+    /// Maps to ``NativeAdLayout/media``.
     case medium = "Medium"
 
-    var width: CGFloat {
-        16 * 20
-    }
-
-    var height: CGFloat {
+    /// The equivalent 2.x layout.
+    public var layout: NativeAdLayout {
         switch self {
         case .small:
-            16 * 6
+            .compact
         case .medium:
-            16 * 20
+            .media
         }
     }
 }

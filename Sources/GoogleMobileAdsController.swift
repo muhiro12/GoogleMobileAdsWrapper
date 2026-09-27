@@ -21,17 +21,20 @@ public final class GoogleMobileAdsController {
         MobileAds.shared.start()
     }
 
-    /// Builds a native ad using one of the supported layouts.
+    /// Builds a native ad using one of the 1.x layouts, limited to the 1.x width of 320 points.
+    @available(*, deprecated, message: "Use NativeAdView(adUnitID:layout:).")
     public func buildNativeAd(_ size: NativeAdSize) -> some View {
-        NativeAd(size: size)
-            .environment(\.adUnitID, adUnitID)
+        NativeAdView(adUnitID: adUnitID, layout: size.layout)
+            .frame(maxWidth: NativeAdContainerView.idealWidth)
     }
 
-    /// Builds a native ad from a legacy layout ID, or no view if the ID is unknown.
+    /// Builds a native ad from a 1.x layout ID, or no view if the ID is unknown.
+    @available(*, deprecated, message: "Use NativeAdView(adUnitID:layout:).")
     @ViewBuilder
     public func buildNativeAd(_ sizeID: String) -> some View {
         if let size = NativeAdSize(rawValue: sizeID) {
-            buildNativeAd(size)
+            NativeAdView(adUnitID: adUnitID, layout: size.layout)
+                .frame(maxWidth: NativeAdContainerView.idealWidth)
         }
     }
 }

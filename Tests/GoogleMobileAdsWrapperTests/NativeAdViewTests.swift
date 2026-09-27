@@ -8,148 +8,254 @@ import Testing
 final class NativeAdViewTests {
     private var windows: [UIWindow] = []
 
-    @Test(arguments: NativeAdSize.allCases)
-    func resizingProducesStableUnambiguousAssetLayout(size: NativeAdSize) throws {
-        let (container, loader) = makeView(size: size)
-        let ad = StubNativeAd()
-        ad.stubBody = "A description that wraps as the available width changes."
-        ad.stubCallToAction = "Learn more about this offer"
-        ad.stubAdvertiser = "Example advertiser"
-        ad.stubIcon = .init(image: UIImage())
-        container.adLoader(loader, didReceive: ad)
-        for width in [CGFloat(320), 240, 280, 320] {
-            let fitted = container.fittingSize(width: width)
-            container.frame.size = fitted
-            container.layoutIfNeeded()
-            #expect(container.fittingSize(width: width) == fitted)
-            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-            for asset in [content.headlineView, content.bodyView, content.callToActionView, content.iconView]
-                .compactMap({ $0 }) {
-                #expect(!asset.hasAmbiguousLayout)
+    @Test(arguments: NativeAdLayout.allCases)
+    func layoutsTrackTheProposedWidthWithoutAFixedMaximum(layout: NativeAdLayout) {
+        for width in [CGFloat(600), 360, 240, 320] {
+            let (container, _) = loadedView(layout: layout, ad: .fixture(), width: width)
+            let content = container.contentView
+            #expect(container.bounds.width == width)
+            #expect(container.fittingSize(width: width, height: nil) == container.bounds.size)
+            #expect(!content.isHidden)
+            for asset in assets(of: content) {
+                #expect(!asset.hasAmbiguousLayout, "\(type(of: asset))")
                 let frame = asset.convert(asset.bounds, to: content)
                 #expect(frame.minX >= -0.5)
                 #expect(frame.maxX <= width + 0.5)
-                #expect(frame.maxY <= fitted.height + 0.5)
+                #expect(frame.maxY <= container.bounds.height + 0.5)
             }
         }
     }
 
     @Test
-    func textSizeChangesReflowTheExistingAdWithoutReloading() throws {
-        let (container, loader) = makeView(size: .small)
-        let ad = StubNativeAd()
-        ad.stubBody = "Description"
-        ad.stubCallToAction = "Learn more"
-        container.adLoader(loader, didReceive: ad)
-        for category in [UIContentSizeCategory.accessibilityExtraExtraExtraLarge, .large] {
-            container.traitOverrides.preferredContentSizeCategory = category
-            container.frame.size = container.fittingSize(width: 280)
-            container.layoutIfNeeded()
-            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-            #expect(content.nativeAd === ad)
-            #expect((content.mediaView != nil) == category.isAccessibilityCategory)
-            #expect(loader.loadCount == 1)
-        }
-    }
-
-    @Test
-    func unspecifiedWidthsProduceFiniteSizes() {
-        let (container, _) = makeView(size: .small)
-        for width in [CGFloat.zero, .infinity, .nan] {
-            let fitted = container.fittingSize(width: width)
-            #expect(fitted.width == NativeAdSize.small.width)
+    func unspecifiedProposalsUseTheIdealWidth() {
+        let (container, _) = loadedView(layout: .compact, ad: .fixture(), width: 320)
+        for width in [CGFloat?.none, 0, .infinity, .nan] {
+            let fitted = container.fittingSize(width: width, height: .infinity)
+            #expect(fitted.width == NativeAdContainerView.idealWidth)
+            #expect(fitted.height > 0)
             #expect(fitted.height.isFinite)
         }
     }
 
     @Test
-    func contentFollowsContainerResizing() throws {
-        for size in [NativeAdSize.small, .medium] {
-            let (container, _) = makeView(size: size)
-            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-            for width in [CGFloat(280), 320] {
-                container.frame = .init(x: 0, y: 0, width: width, height: size.height)
-                container.layoutIfNeeded()
-                #expect(content.frame == container.bounds)
+    func loadStateIsReportedAndUnloadedAdsTakeNoHeight() {
+        let (container, loader) = makeView(layout: .compact)
+        var states: [NativeAdLoadState] = []
+        container.onLoadStateChange = { state in
+            states.append(state)
+        }
+        #expect(container.loadState == .loading)
+        #expect(container.fittingSize(width: 320, height: nil).height == 0)
+        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        #expect(container.fittingSize(width: 320, height: nil).height > 0)
+        container.update(adUnitID: "replacement-unit", layout: .compact)
+        #expect(container.loadState == .loading)
+        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        #expect(states == [.loaded, .loading, .failed])
+        #expect(container.fittingSize(width: 320, height: nil).height == 0)
+    }
+
+    @Test
+    func failureReportsTheFailedState() {
+        let (container, loader) = makeView(layout: .media)
+        var states: [NativeAdLoadState] = []
+        container.onLoadStateChange = { state in
+            states.append(state)
+        }
+        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        #expect(states == [.failed])
+        #expect(container.contentView.isHidden)
+    }
+
+    @Test
+    func narrowWidthsMoveTheCompactCallToActionBelowTheHeadline() throws {
+        let ad = StubNativeAd.fixture()
+        let (wide, _) = loadedView(layout: .compact, ad: ad, width: 360)
+        let (narrow, _) = loadedView(layout: .compact, ad: .fixture(), width: 200)
+        let wideButton = try #require(wide.contentView.callToActionView)
+        let wideHeadline = try #require(wide.contentView.headlineView)
+        #expect(wideButton.frame(in: wide).minY < wideHeadline.frame(in: wide).maxY)
+        #expect(wideButton.frame(in: wide).minX > wideHeadline.frame(in: wide).maxX)
+        let narrowButton = try #require(narrow.contentView.callToActionView)
+        let narrowHeadline = try #require(narrow.contentView.headlineView)
+        #expect(narrowButton.frame(in: narrow).minY >= narrowHeadline.frame(in: narrow).maxY)
+    }
+
+    @Test(arguments: NativeAdLayout.allCases)
+    func accessibilityTextKeepsTheChosenLayoutVisibleAndBounded(layout: NativeAdLayout) throws {
+        let (regular, _) = loadedView(layout: layout, ad: .fixture(), width: 320)
+        let (large, loader) = loadedView(
+            layout: layout,
+            ad: .fixture(),
+            width: 320,
+            category: .accessibilityExtraExtraExtraLarge
+        )
+        let content = large.contentView
+        #expect(!content.isHidden)
+        #expect((content.mediaView != nil) == (layout == .media))
+        #expect(large.bounds.height > regular.bounds.height)
+        #expect(large.bounds.height < regular.bounds.height + 280)
+        #expect(loader.loadCount == 1)
+        let headline = try #require(content.headlineView as? UILabel)
+        #expect(headline.numberOfLines == 0)
+        #expect(headline.font.pointSize <= UIFont.preferredFont(
+            forTextStyle: .headline,
+            compatibleWith: .init(preferredContentSizeCategory: .accessibilityMedium)
+        ).pointSize)
+    }
+
+    @Test
+    func textSizeChangesReflowTheExistingAdWithoutReloading() {
+        let (container, loader) = loadedView(layout: .compact, ad: .fixture(), width: 280)
+        let ad = container.contentView.nativeAd
+        for category in [UIContentSizeCategory.accessibilityExtraExtraExtraLarge, .large] {
+            container.traitOverrides.preferredContentSizeCategory = category
+            container.frame.size = container.fittingSize(width: 280, height: nil)
+            container.layoutIfNeeded()
+            #expect(container.contentView.nativeAd === ad)
+            #expect(container.contentView.mediaView == nil)
+            #expect(!container.contentView.isHidden)
+            #expect(loader.loadCount == 1)
+        }
+    }
+
+    @Test
+    func limitedHeightOmitsOptionalAssetsBeforeTruncatingTheHeadline() throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubHeadline = "A long headline that wraps across several lines in a narrow placement"
+        ad.stubBody = String(repeating: "Body copy that is optional. ", count: 4)
+        let (container, _) = loadedView(layout: .compact, ad: ad, width: 240)
+        let content = container.contentView
+        let headline = try #require(content.headlineView as? UILabel)
+        let natural = container.bounds.height
+
+        var smallest: CGSize?
+        for maximumHeight in stride(from: natural - 1, through: 20, by: -1) {
+            guard let size = content.fit(width: 240, maximumHeight: maximumHeight) else {
+                break
+            }
+            #expect(size.height <= maximumHeight)
+            // Optional assets are omitted before required text is truncated.
+            #expect(content.bodyView?.isHidden == true)
+            if content.advertiserView?.isHidden == false {
+                #expect(headline.numberOfLines == 0)
+            }
+            smallest = size
+        }
+        let tight = try #require(smallest)
+        #expect(content.fit(width: 240, maximumHeight: tight.height) == tight)
+        #expect(content.advertiserView?.isHidden == true)
+        #expect(headline.numberOfLines > 0)
+        container.frame.size = tight
+        container.layoutIfNeeded()
+        // The truncated headline keeps at least Google's minimum characters visible.
+        let visibleText = String(headline.text!.prefix(NativeAdContentView.minimumHeadlineCharacters)) + "…"
+        let needed = (visibleText as NSString).boundingRect(
+            with: .init(width: headline.bounds.width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: headline.font!],
+            context: nil
+        ).height
+        #expect(headline.bounds.height >= needed - 1)
+
+        let button = try #require(content.callToActionView)
+        #expect(!button.isHidden)
+        #expect(button.bounds.width >= button.intrinsicContentSize.width - 0.5)
+    }
+
+    @Test
+    func impossibleConstraintsLeaveTheAdEmpty() {
+        let (container, _) = loadedView(layout: .media, ad: .fixture(), width: 320)
+        for size in [CGSize(width: 100, height: 400), .init(width: 320, height: 40)] {
+            container.frame.size = size
+            container.layoutIfNeeded()
+            #expect(container.contentView.isHidden)
+            #expect(container.loadState == .loaded)
+            #expect(container.fittingSize(width: size.width, height: size.height).height == 0)
+        }
+        container.frame.size = container.fittingSize(width: 320, height: nil)
+        container.layoutIfNeeded()
+        #expect(!container.contentView.isHidden)
+    }
+
+    @Test(arguments: [CGFloat(16) / 9, 1, CGFloat(9) / 16, 0])
+    func mediaHeightIsBoundedAndPreservesTheCreative(ratio: CGFloat) throws {
+        for width in [CGFloat(320), 600, 180] {
+            let ad = StubNativeAd.fixture()
+            ad.stubMediaContent.ratio = ratio
+            let (container, _) = loadedView(layout: .media, ad: ad, width: width)
+            let media = try #require(container.contentView.mediaView)
+            #expect(media.contentMode == .scaleAspectFit)
+            #expect(media.bounds.width == width)
+            #expect(media.bounds.height >= NativeAdContentView.minimumMediaHeight)
+            #expect(media.bounds.height <= min(max(180, width * 9 / 16), 320) + 0.5)
+            if ratio >= 16 / 9 {
+                #expect(abs(media.bounds.height - max(120, width / ratio)) < 1 || media.bounds.height >= 180 - 0.5)
             }
         }
     }
 
     @Test
-    func mediaFitsItsRegionForDifferentCreativeAspectRatios() throws {
-        let (container, loader) = makeView(size: .medium)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-        let mediaView = try #require(content.mediaView)
-        container.frame = .init(x: 0, y: 0, width: 320, height: 288)
-        var previousConstraintCount: Int?
-        for ratio in [CGFloat(16) / 9, 1, CGFloat(9) / 16, 0] {
-            let ad = StubNativeAd()
-            ad.stubMediaContent.ratio = ratio
-            container.adLoader(loader, didReceive: ad)
-            container.frame.size = container.fittingSize(width: 320)
-            container.layoutIfNeeded()
-            #expect(mediaView.contentMode == .scaleAspectFit)
-            if let previousConstraintCount {
-                #expect(mediaView.constraints.count == previousConstraintCount)
-            }
-            previousConstraintCount = mediaView.constraints.count
-            #expect(mediaView.bounds.height >= 120)
-            let expectedHeight: CGFloat = ratio > 0 ? max(120, 320 / ratio) : 180
-            #expect(abs(mediaView.bounds.height - expectedHeight) < 1)
-            #expect(mediaView.bounds.width == 320)
-        }
+    func compactVideoRegistersABoundedMediaView() throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubMediaContent.video = true
+        ad.stubMediaContent.ratio = 9 / 16
+        let (container, loader) = loadedView(layout: .compact, ad: ad, width: 280)
+        let media = try #require(container.contentView.mediaView)
+        #expect(container.contentView.nativeAd === ad)
+        #expect(media.bounds.width >= 120)
+        #expect(media.bounds.height == NativeAdContentView.minimumMediaHeight)
+        #expect(container.bounds.height < 400)
+        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .compact)
+        #expect(container.contentView.nativeAd === ad)
+        #expect(loader.loadCount == 1)
     }
 
     @Test
     func missingAssetsAreHiddenAndRestoredOnReplacement() throws {
-        let (container, loader) = makeView(size: .medium)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let (container, loader) = makeView(layout: .media)
+        let content = container.contentView
         let ad = StubNativeAd()
         container.adLoader(loader, didReceive: ad)
+        container.layoutIfNeeded()
         #expect(content.bodyView?.isHidden == true)
         #expect(content.iconView?.isHidden == true)
         #expect(content.advertiserView?.isHidden == true)
         #expect(content.callToActionView?.isHidden == true)
 
-        ad.stubBody = "Description"
-        ad.stubAdvertiser = "Advertiser"
-        ad.stubCallToAction = "Install"
-        ad.stubIcon = .init(image: .init())
-        container.adLoader(loader, didReceive: ad)
+        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.layoutIfNeeded()
         #expect(content.bodyView?.isHidden == false)
         #expect(content.iconView?.isHidden == false)
         #expect(content.advertiserView?.isHidden == false)
         #expect(content.callToActionView?.isHidden == false)
-        #expect((content.bodyView as? UILabel)?.text == "Description")
+        #expect((content.bodyView as? UILabel)?.text == StubNativeAd.fixture().body)
     }
 
-    @Test
-    func callToActionUsesAdTitleAndLetsSDKHandleTouches() throws {
-        for size in [NativeAdSize.small, .medium] {
-            let (container, loader) = makeView(size: size)
-            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-            let ad = StubNativeAd()
-            ad.stubCallToAction = "Learn more"
-            ad.stubBody = "A longer description verifies that the ad copy stays inside its card."
-            ad.stubAdvertiser = "Example advertiser"
-            ad.stubIcon = .init(
-                image: UIGraphicsImageRenderer(size: .init(width: 48, height: 48)).image { context in
-                    UIColor.systemBlue.setFill()
-                    context.fill(.init(x: 0, y: 0, width: 48, height: 48))
-                })
-            container.adLoader(loader, didReceive: ad)
-            let button = try #require(content.callToActionView as? UIButton)
-            #expect(button.configuration?.title == "Learn more")
-            #expect(!button.isUserInteractionEnabled)
-            #expect(content.nativeAd === ad)
-            #expect(!content.isHidden)
-            container.frame = .init(origin: .zero, size: container.fittingSize(width: 320))
-            container.backgroundColor = .white
-            container.layoutIfNeeded()
-            let image = UIGraphicsImageRenderer(bounds: container.bounds).image { context in
-                container.layer.render(in: context.cgContext)
-            }
-            Attachment.record(image, named: "Native ad \(size.rawValue) with fixture assets.png")
+    @Test(arguments: NativeAdLayout.allCases)
+    func callToActionUsesTheAdTitleAndLetsTheSDKHandleTouches(layout: NativeAdLayout) throws {
+        let (container, _) = loadedView(layout: layout, ad: .fixture(), width: 320)
+        let content = container.contentView
+        let button = try #require(content.callToActionView as? UIButton)
+        #expect(button.configuration?.title == "Learn more")
+        #expect(!button.isUserInteractionEnabled)
+        #expect(content.backgroundColor == nil)
+        #expect(container.backgroundColor == nil)
+    }
+
+    @Test(arguments: NativeAdLayout.allCases)
+    func attributionBadgeIsReadableAndClearsAdChoices(layout: NativeAdLayout) throws {
+        let (container, _) = loadedView(layout: layout, ad: .fixture(), width: 280)
+        let content = container.contentView
+        let badge = try #require(findView(in: content) { view in
+            view.accessibilityIdentifier == "nativeAd.attribution"
+        } as? UILabel)
+        #expect(badge.text == "Ad")
+        #expect(badge.bounds.width >= 15)
+        #expect(badge.bounds.height >= 15)
+        let adChoicesCorner = CGRect(x: content.bounds.width - 28, y: 0, width: 28, height: 20)
+        for asset in assets(of: content) + [badge] {
+            #expect(!asset.frame(in: content).intersects(adChoicesCorner))
         }
     }
 
@@ -157,27 +263,27 @@ final class NativeAdViewTests {
     func loadingWaitsForAnOwningWindowAndUsesItsController() {
         var suppliedController: UIViewController?
         let loader = makeLoader()
-        let container = GoogleMobileAdsWrapper.NativeAdView(
+        let container = NativeAdContainerView(
             adUnitID: "test-unit",
-            size: .small,
+            layout: .compact,
             makeAdLoader: { _, controller in
                 suppliedController = controller
                 return loader
             }
         )
-        container.update(adUnitID: "test-unit", size: .small)
+        container.update(adUnitID: "test-unit", layout: .compact)
         #expect(loader.loadCount == 0)
         #expect(suppliedController == nil)
         let controller = attach(container)
         #expect(suppliedController === controller)
         #expect(loader.loadCount == 1)
-        container.update(adUnitID: "test-unit", size: .small)
+        container.update(adUnitID: "test-unit", layout: .compact)
         #expect(loader.loadCount == 1)
     }
 
     @Test
     func movingWindowsUpdatesPresentationWithoutReloading() {
-        let (container, loader) = makeView(size: .small)
+        let (container, loader) = makeView(layout: .compact)
         let ad = StubNativeAd()
         container.adLoader(loader, didReceive: ad)
         #expect(ad.rootViewController === container.window?.rootViewController)
@@ -190,12 +296,12 @@ final class NativeAdViewTests {
 
     @Test
     func sizeChangeReusesTheLoadedAdInTheNewLayout() throws {
-        let (container, loader) = makeView(size: .small)
-        let originalContent = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let (container, loader) = makeView(layout: .compact)
+        let originalContent = container.contentView
         let ad = StubNativeAd()
         container.adLoader(loader, didReceive: ad)
-        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, size: .medium)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .media)
+        let content = container.contentView
         #expect(content !== originalContent)
         #expect(originalContent.nativeAd == nil)
         #expect(content.mediaView != nil)
@@ -208,9 +314,9 @@ final class NativeAdViewTests {
     func adUnitChangeIgnoresOldSuccessAndFailureCallbacks() throws {
         var loaders: [StubAdLoader] = []
         var requestedAdUnitIDs: [String] = []
-        let container = GoogleMobileAdsWrapper.NativeAdView(
+        let container = NativeAdContainerView(
             adUnitID: "first-unit",
-            size: .small,
+            layout: .compact,
             makeAdLoader: { adUnitID, _ in
                 requestedAdUnitIDs.append(adUnitID)
                 let loader = StubAdLoader(
@@ -222,11 +328,11 @@ final class NativeAdViewTests {
         )
         attach(container)
         let firstLoader = try #require(loaders.first)
-        container.update(adUnitID: "second-unit", size: .small)
+        container.update(adUnitID: "second-unit", layout: .compact)
         #expect(requestedAdUnitIDs == ["first-unit", "second-unit"])
         #expect(firstLoader.delegate == nil)
         let secondLoader = try #require(loaders.last)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let content = container.contentView
         let newAd = StubNativeAd()
         container.adLoader(secondLoader, didReceive: newAd)
         container.adLoader(firstLoader, didReceive: StubNativeAd())
@@ -237,8 +343,8 @@ final class NativeAdViewTests {
 
     @Test
     func dismantleDiscardsPendingCallbacksAndReleasesPresentation() throws {
-        let (container, loader) = makeView(size: .small)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let (container, loader) = makeView(layout: .compact)
+        let content = container.contentView
         let ad = StubNativeAd()
         container.adLoader(loader, didReceive: ad)
         NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
@@ -253,26 +359,26 @@ final class NativeAdViewTests {
 
     @Test
     func dismantledViewCannotRestartLoadingWhenReattached() throws {
-        let (container, loader) = makeView(size: .small)
+        let (container, loader) = makeView(layout: .compact)
         NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
         container.removeFromSuperview()
         attach(container)
-        container.update(adUnitID: "replacement-unit", size: .medium)
+        container.update(adUnitID: "replacement-unit", layout: .media)
 
         #expect(loader.loadCount == 1)
         #expect(loader.delegate == nil)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let content = container.contentView
         #expect(content.nativeAd == nil)
         #expect(content.isHidden)
     }
 
     @Test
     func failedRequestDoesNotRetryOnUnchangedSwiftUIUpdates() throws {
-        let (container, loader) = makeView(size: .small)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let (container, loader) = makeView(layout: .compact)
+        let content = container.contentView
         container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         for _ in 0..<3 {
-            container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, size: .small)
+            container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .compact)
         }
         #expect(loader.loadCount == 1)
         #expect(content.nativeAd == nil)
@@ -286,86 +392,116 @@ final class NativeAdViewTests {
         loader.onLoad = { loader in
             (loader.delegate as? GoogleMobileAds.NativeAdLoaderDelegate)?.adLoader(loader, didReceive: ad)
         }
-        let container = GoogleMobileAdsWrapper.NativeAdView(
+        let container = NativeAdContainerView(
             adUnitID: "test-unit",
-            size: .small,
+            layout: .compact,
             makeAdLoader: { _, _ in
                 loader
             }
         )
         attach(container)
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+        let content = container.contentView
         #expect(content.nativeAd === ad)
         #expect(!content.isHidden)
     }
 
-    @Test(arguments: NativeAdSize.allCases)
-    func attributionLeavesSpaceForAdChoices(size: NativeAdSize) throws {
-        let (container, loader) = makeView(size: size)
-        let ad = StubNativeAd()
-        ad.stubCallToAction = "View details"
-        container.adLoader(loader, didReceive: ad)
-        container.frame.size = container.fittingSize(width: 280)
-        container.layoutIfNeeded()
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-        let label = try #require(content.subviews.first {
-            $0.accessibilityIdentifier == "nativeAd.attribution"
-        } as? UILabel)
-        #expect(label.text == "Ad")
-        #expect(label.bounds.width >= 15)
-        #expect(label.bounds.height >= 15)
-        #expect(label.frame.maxX <= content.bounds.width - 64)
-        let headline = try #require(content.headlineView)
-        #expect(headline.convert(headline.bounds, to: content).minY >= 32)
-    }
-
     @Test
-    func compactVideoUsesMediaLayoutAndPreservesTheLoadedAd() throws {
-        let (container, loader) = makeView(size: .small)
-        let ad = StubNativeAd()
-        ad.stubMediaContent.video = true
-        ad.stubMediaContent.ratio = 9 / 16
-        container.adLoader(loader, didReceive: ad)
-        container.frame.size = container.fittingSize(width: 280)
-        container.layoutIfNeeded()
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-        let media = try #require(content.mediaView)
-        #expect(content.nativeAd === ad)
-        #expect(media.bounds.width >= 120)
-        #expect(media.bounds.height >= 120)
-        #expect(container.bounds.height > NativeAdSize.small.height)
-        #expect(loader.loadCount == 1)
-        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, size: .small)
-        #expect(content.nativeAd === ad)
-        #expect(loader.loadCount == 1)
+    func recordFixtureCaptures() throws {
+        let fixtures: [(name: String, ad: () -> StubNativeAd)] = [
+            ("short", {
+                StubNativeAd.fixture()
+            }),
+            ("long", {
+                let ad = StubNativeAd.fixture()
+                ad.stubHeadline = "An unusually long headline that needs several lines at large sizes"
+                ad.stubBody = "A longer body describes the offer in detail so wrapping and optional omission can be reviewed."
+                ad.stubAdvertiser = "Example Advertiser With A Long Name"
+                ad.stubCallToAction = "Install now"
+                return ad
+            }),
+            ("missing", {
+                StubNativeAd()
+            })
+        ]
+        for layout in NativeAdLayout.allCases {
+            for category in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
+                for width in [CGFloat(361), 240] {
+                    for fixture in fixtures {
+                        let (container, _) = loadedView(layout: layout, ad: fixture.ad(), width: width, category: category)
+                        record(container, named: "\(layout.rawValue) \(category.rawValue) w\(Int(width)) \(fixture.name)")
+                    }
+                }
+            }
+        }
+        for ratio in [CGFloat(9) / 16, 1] {
+            let ad = StubNativeAd.fixture()
+            ad.stubMediaContent.ratio = ratio
+            let (container, _) = loadedView(layout: .media, ad: ad, width: 361)
+            record(container, named: "media portrait ratio \(String(format: "%.2f", ratio)) w361")
+        }
+        let video = StubNativeAd.fixture()
+        video.stubMediaContent.video = true
+        video.stubMediaContent.ratio = 9 / 16
+        let (compactVideo, _) = loadedView(layout: .compact, ad: video, width: 361)
+        record(compactVideo, named: "compact video w361")
+        let (dark, _) = loadedView(layout: .media, ad: .fixture(), width: 361)
+        dark.traitOverrides.userInterfaceStyle = .dark
+        dark.tintColor = .systemOrange
+        dark.frame.size = dark.fittingSize(width: 361, height: nil)
+        dark.layoutIfNeeded()
+        record(dark, named: "media dark orange tint w361")
     }
 
-    @Test(arguments: NativeAdSize.allCases)
-    func largeTextFitsNarrowDarkCards(size: NativeAdSize) throws {
-        let (container, loader) = makeView(size: size)
-        container.traitOverrides.preferredContentSizeCategory = .accessibilityExtraExtraExtraLarge
-        container.traitOverrides.userInterfaceStyle = .dark
-        let ad = StubNativeAd()
-        ad.stubBody = "A longer description remains readable with large text in a narrow card."
-        ad.stubCallToAction = "View more details"
-        ad.stubAdvertiser = "Example advertiser"
-        container.adLoader(loader, didReceive: ad)
-        container.frame.size = container.fittingSize(width: 280)
-        container.layoutIfNeeded()
-        let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
-        let button = try #require(content.callToActionView)
-        #expect(abs(button.bounds.width - 280) < 1)
-        for asset in [content.headlineView, content.bodyView, content.callToActionView].compactMap({ $0 }) {
-            let frame = asset.convert(asset.bounds, to: content)
-            #expect(frame.minY >= 31.5)
-            #expect(frame.maxY <= content.bounds.height + 1)
-            #expect(frame.minX >= 0)
-            #expect(frame.maxX <= content.bounds.width + 1)
-        }
-        let image = UIGraphicsImageRenderer(bounds: container.bounds).image { context in
+    /// Draws the ad on an app-style card, as a host app would present it.
+    private func record(_ container: NativeAdContainerView, named name: String) {
+        let padding: CGFloat = 16
+        let size = CGSize(width: container.bounds.width + padding * 2, height: container.bounds.height + padding * 2)
+        let traits = container.traitCollection
+        let image = UIGraphicsImageRenderer(size: size).image { context in
+            UIColor.secondarySystemBackground.resolvedColor(with: traits).setFill()
+            context.fill(.init(origin: .zero, size: size))
+            context.cgContext.translateBy(x: padding, y: padding)
             container.layer.render(in: context.cgContext)
         }
-        Attachment.record(image, named: "Native ad large text dark \(size.rawValue).png")
+        Attachment.record(image, named: "\(name).png")
+    }
+
+    private func loadedView(
+        layout: NativeAdLayout,
+        ad: StubNativeAd,
+        width: CGFloat,
+        category: UIContentSizeCategory? = nil
+    ) -> (NativeAdContainerView, StubAdLoader) {
+        let (container, loader) = makeView(layout: layout)
+        if let category {
+            container.traitOverrides.preferredContentSizeCategory = category
+        }
+        container.adLoader(loader, didReceive: ad)
+        container.frame.size = container.fittingSize(width: width, height: nil)
+        container.layoutIfNeeded()
+        return (container, loader)
+    }
+
+    private func assets(of content: NativeAdContentView) -> [UIView] {
+        [content.headlineView, content.bodyView, content.advertiserView, content.callToActionView, content.iconView, content.mediaView]
+            .compactMap { view in
+                view
+            }
+            .filter { view in
+                view.superview != nil && !view.isHidden
+            }
+    }
+
+    private func findView(in view: UIView, where predicate: (UIView) -> Bool) -> UIView? {
+        if predicate(view) {
+            return view
+        }
+        for subview in view.subviews {
+            if let match = findView(in: subview, where: predicate) {
+                return match
+            }
+        }
+        return nil
     }
 
     private func makeLoader() -> StubAdLoader {
@@ -383,22 +519,29 @@ final class NativeAdViewTests {
         return controller
     }
 
-    private func makeView(size: NativeAdSize) -> (GoogleMobileAdsWrapper.NativeAdView, StubAdLoader) {
+    private func makeView(layout: NativeAdLayout) -> (NativeAdContainerView, StubAdLoader) {
         let loader = StubAdLoader(
             adUnitID: DemoAdUnitID.nativeAdvanced.rawValue,
             rootViewController: nil,
             adTypes: [.native],
             options: nil
         )
-        let view = GoogleMobileAdsWrapper.NativeAdView(
+        let view = NativeAdContainerView(
             adUnitID: DemoAdUnitID.nativeAdvanced.rawValue,
-            size: size,
+            layout: layout,
             makeAdLoader: { _, _ in
                 loader
             }
         )
+        view.frame = .init(x: 0, y: 0, width: 320, height: 600)
         attach(view)
         return (view, loader)
+    }
+}
+
+private extension UIView {
+    func frame(in view: UIView) -> CGRect {
+        convert(bounds, to: view)
     }
 }
 
@@ -415,6 +558,16 @@ final class StubAdLoader: GoogleMobileAds.AdLoader {
 final class StubMediaContent: GoogleMobileAds.MediaContent {
     var ratio: CGFloat = 0
     var video = false
+    var image: UIImage?
+
+    override var mainImage: UIImage? {
+        get {
+            image
+        }
+        set {
+            image = newValue
+        }
+    }
 
     override var hasVideoContent: Bool {
         video
@@ -426,6 +579,7 @@ final class StubMediaContent: GoogleMobileAds.MediaContent {
 }
 
 final class StubNativeAd: GoogleMobileAds.NativeAd {
+    var stubHeadline: String? = "Test headline"
     var stubBody: String?
     var stubAdvertiser: String?
     var stubCallToAction: String?
@@ -433,7 +587,7 @@ final class StubNativeAd: GoogleMobileAds.NativeAd {
     let stubMediaContent = StubMediaContent()
 
     override var headline: String? {
-        "Test headline"
+        stubHeadline
     }
 
     override var body: String? {
@@ -454,5 +608,25 @@ final class StubNativeAd: GoogleMobileAds.NativeAd {
 
     override var mediaContent: GoogleMobileAds.MediaContent {
         stubMediaContent
+    }
+}
+
+extension StubNativeAd {
+    static func fixture() -> StubNativeAd {
+        let ad = StubNativeAd()
+        ad.stubBody = "A short description of the advertised app."
+        ad.stubAdvertiser = "Example advertiser"
+        ad.stubCallToAction = "Learn more"
+        ad.stubIcon = .init(image: fixtureImage(size: .init(width: 80, height: 80), color: .systemBlue))
+        ad.stubMediaContent.ratio = 16 / 9
+        ad.stubMediaContent.image = fixtureImage(size: .init(width: 320, height: 180), color: .systemTeal)
+        return ad
+    }
+
+    private static func fixtureImage(size: CGSize, color: UIColor) -> UIImage {
+        UIGraphicsImageRenderer(size: size).image { context in
+            color.setFill()
+            context.fill(.init(origin: .zero, size: size))
+        }
     }
 }
