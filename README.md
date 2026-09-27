@@ -10,15 +10,37 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Usage
 
-On the main actor, create a `GoogleMobileAdsController` with your native ad
-unit ID. Call `start()`
-once the app has completed any required consent flow, then display
-`controller.buildNativeAd(.small)` or `controller.buildNativeAd(.medium)`.
-`NativeAdSize` is a public `Sendable` enum, so adapter packages can map their own
-size types to it without duplicating string identifiers.
+On the main actor, call `GoogleMobileAdsController(adUnitID:).start()` once the
+app has completed any required consent flow. Then place a `NativeAdView`:
 
-The existing `buildNativeAd("Small")` and `buildNativeAd("Medium")` calls remain
-supported. Unknown string identifiers continue to produce an empty view.
+```swift
+import GoogleMobileAdsWrapper
+import SwiftUI
+
+struct SponsoredRow: View {
+    let adUnitID: String
+    @State private var loadState = NativeAdLoadState.loading
+
+    var body: some View {
+        if loadState != .failed {
+            NativeAdView(adUnitID: adUnitID, layout: .compact) { state in
+                loadState = state
+            }
+            .padding()
+            .background(.background.secondary, in: .rect(cornerRadius: 12))
+        }
+    }
+}
+```
+
+`NativeAdLayout.compact` shows the icon, headline, body, and call to action in a
+short arrangement. `.media` adds a bounded media region. `NativeAdLoadState`
+reports `.loading`, `.loaded`, and `.failed` so the app can decide whether to
+show a placeholder, collapse the slot, or keep it.
+
+If the app also imports `GoogleMobileAds`, qualify the view as
+`GoogleMobileAdsWrapper.NativeAdView` to distinguish it from the SDK's UIKit
+class.
 
 The app owns consent orchestration, ATT, ad placement, and subscription policy.
 Configure
@@ -117,11 +139,11 @@ are not a claim of regulatory compliance or app release readiness.
 ## Loading behavior
 
 Ads load when their view is attached to a window. Changing the ad unit ID starts
-a new request; changing only the size reuses the loaded ad. Removing the SwiftUI
+a new request; changing only the layout reuses the loaded ad. Removing the SwiftUI
 view disconnects pending callbacks and permanently stops requests for that view
-instance, including during later UIKit reattachment. Failed requests remain
-hidden and are logged under the `GoogleMobileAdsWrapper` subsystem without
-automatic retry loops.
+instance, including during later UIKit reattachment. Failed requests report
+`.failed`, take no height, and are logged under the `GoogleMobileAdsWrapper`
+subsystem without automatic retry loops.
 
 ## Native ad presentation
 
@@ -129,20 +151,47 @@ The SwiftUI interface wraps code-built UIKit assets registered with Google's
 `NativeAdView`; no XIB or storyboard resources are required. Ad loading and
 presentation lifecycle are separate from asset layout.
 
-Both layouts include a localized ad attribution badge (English and Japanese)
-and keep the top-right corner clear for the SDK's AdChoices overlay. Do not
-cover that area with app controls or make the card background a separate
-click target. Asset clicks and impressions remain managed by Google.
+The ad view draws no background, border, or outer padding. Card styling,
+spacing, and separators belong to the app; apply them with ordinary SwiftUI
+modifiers. Text uses system text styles and semantic colors, and the
+call-to-action button uses a standard filled configuration that follows the
+inherited UIKit tint color.
 
-A compact ad automatically uses the media layout when the response includes
-video or an accessibility text size is active. Media preserves its aspect ratio
-and at least a 120-point dimension;
-portrait creatives and larger text can increase the card height. Let SwiftUI
-size the view naturally rather than forcing the old 64/288-point heights.
-Headlines and body copy wrap, and system text styles support Dynamic Type.
-Verify placements against Google's
-[native ad requirements](https://support.google.com/admob/answer/6329638),
-including actual creative content and SDK-rendered AdChoices behavior.
+Each layout shows an "Ad" badge next to the advertiser and keeps the top-trailing
+corner clear for the SDK's AdChoices overlay. The badge text is the same in
+every locale by design. Google's policy asks for attribution that users can
+recognize and that is localized appropriately, so confirm this choice for the
+markets the app serves. Do not cover the AdChoices corner with app controls or
+make the card background a separate click target. Asset clicks and impressions
+remain managed by Google.
+
+### Sizing
+
+The view takes the width its parent proposes, or 320 points when no width is
+proposed. There is no fixed maximum width; use `.frame(maxWidth:)` to limit it.
+The height is the natural height of the assets, up to the proposed height.
+
+- Narrow widths and accessibility text sizes move the compact call to action
+  below the headline instead of switching to the media layout.
+- Dynamic Type is bounded at `accessibilityMedium` so large text reflows without
+  producing very tall ads.
+- Media keeps its aspect ratio with aspect-fit scaling inside a region of at
+  least 120 × 120 points and at most 320 points tall. Portrait and square
+  creatives are letterboxed rather than growing the ad.
+- A compact ad whose response contains video shows a 120-point media region
+  rather than omitting the video.
+- When the proposed height is smaller than the natural height, the view shrinks
+  media to its minimum, then omits the body and advertiser, then truncates the
+  headline while keeping at least its first 25 characters visible. The call to
+  action is never truncated.
+- When the space is still too small, or the width is below 160 points, the ad
+  stays empty rather than violating the app's constraints or Google's minimum
+  asset sizes.
+
+Fixed heights cannot guarantee that every creative is shown. Verify placements
+against Google's
+[native ad requirements](https://support.google.com/admob/answer/6329638) with
+real creatives, including video, and check the SDK-rendered AdChoices behavior.
 
 ## Privacy and app responsibilities
 
@@ -169,16 +218,51 @@ and Store declarations remain host-app or publisher responsibilities.
 
 ## Migration
 
+### 2.0
+
+2.0 replaces the controller-built views with a public SwiftUI view:
+
+```swift
+// 1.x
+controller.buildNativeAd(.small)
+controller.buildNativeAd("Medium")
+
+// 2.0
+NativeAdView(adUnitID: adUnitID, layout: .compact)
+NativeAdView(adUnitID: adUnitID, layout: .media)
+```
+
+- `buildNativeAd(_:)` and `NativeAdSize` remain as deprecated shims. They keep
+  the 1.x maximum width of 320 points; `NativeAdSize.layout` maps a legacy size
+  to `NativeAdLayout`.
+- `NativeAdView` has no maximum width and no minimum height. It takes no space
+  until an ad loads and after a failure, so reserve space or show a placeholder
+  based on `NativeAdLoadState` if the placement needs it.
+- A compact ad no longer switches to the media layout for accessibility text
+  sizes. It keeps a compact arrangement and adds a small media region only for
+  video responses.
+- The attribution badge reads "Ad" in every locale, and the package no longer
+  ships localized string resources.
+- The view has no background. Add the card background the app previously
+  relied on.
+- Consent operations and `GoogleMobileAdsController.start()` are unchanged.
+
+### 1.x Swift 6
+
 The package compiles in Swift 6 language mode. `GoogleMobileAdsController`
-is now explicitly main-actor isolated; create and use it from `@MainActor`
-code. Existing typed and string layout calls remain available. The actor
-requirement and variable card height need review at adopter call sites before
-upgrading.
+is main-actor isolated; create and use it from `@MainActor` code.
+
+## Releases
+
+Releases are created manually with the `Release` workflow, which takes an
+explicit `MAJOR.MINOR.PATCH` version and rejects existing tags. Merging to
+`main` no longer publishes a release. The next release is `2.0.0`.
 
 ## Tests
 
 Open `Package.swift` in Xcode and run the `GoogleMobileAdsWrapper` scheme on an
 iOS Simulator. The Swift Testing suites use stub loaders and fixture assets
-without requesting
-ads. Their image attachments verify layout; live ad delivery still needs a host
+without requesting ads. Their image attachments show layouts across widths,
+text sizes, and missing assets; the SDK does not draw fixture media, so media
+regions appear empty. Live ad delivery, video, and AdChoices still need a host
 app configured with Google's test application ID and native ad unit ID.
