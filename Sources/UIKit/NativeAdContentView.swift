@@ -141,11 +141,19 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         return nil
     }
 
+    private var effectiveMinimumMediaHeight: CGFloat {
+        guard adMediaView.mediaContent?.hasVideoContent == true else {
+            return Self.minimumMediaHeight
+        }
+        // The video creative's longer dimension must also reach 256 pixels.
+        return max(Self.minimumMediaHeight, ceil(256 / max(1, traitCollection.displayScale)))
+    }
+
     private func fits(width: CGFloat, aspectRatio: CGFloat) -> [Fit] {
         var fit = Fit(arrangement: arrangement(width: width), mediaHeight: mediaHeight(width: width, aspectRatio: aspectRatio))
         var fits = [fit]
-        if usesMedia, fit.mediaHeight > Self.minimumMediaHeight {
-            fit.mediaHeight = Self.minimumMediaHeight
+        if usesMedia, fit.mediaHeight > effectiveMinimumMediaHeight {
+            fit.mediaHeight = effectiveMinimumMediaHeight
             fits.append(fit)
         }
         fit.showsBody = false
@@ -174,12 +182,12 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     private func mediaHeight(width: CGFloat, aspectRatio: CGFloat) -> CGFloat {
         guard layout == .media else {
             // Compact video keeps the smallest viable media region.
-            return Self.minimumMediaHeight
+            return effectiveMinimumMediaHeight
         }
         let ratio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 16 / 9
         // Tall creatives are letterboxed with aspect fit rather than growing the ad.
         let maximumHeight = min(max(180, width * 9 / 16), 320)
-        return min(max(width / ratio, Self.minimumMediaHeight), maximumHeight)
+        return min(max(width / ratio, effectiveMinimumMediaHeight), max(maximumHeight, effectiveMinimumMediaHeight))
     }
 
     private func apply(_ fit: Fit, width: CGFloat? = nil) {

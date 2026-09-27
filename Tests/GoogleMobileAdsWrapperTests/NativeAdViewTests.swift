@@ -251,6 +251,21 @@ final class NativeAdViewTests {
     }
 
     @Test
+    func compactPortraitVideoMeetsThePixelMinimumOnTwoScaleDisplays() throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubMediaContent.video = true
+        ad.stubMediaContent.ratio = 9 / 16
+        let (container, _) = loadedView(layout: .compact, ad: ad, width: 280)
+        container.traitOverrides.displayScale = 2
+        container.frame.size = container.fittingSize(width: 280, height: nil)
+        container.layoutIfNeeded()
+        let media = try #require(container.contentView.mediaView)
+        #expect(media.bounds.height == 128)
+        #expect(media.bounds.height * 2 >= 256)
+        #expect(!container.contentView.isHidden)
+    }
+
+    @Test
     func compactVideoRegistersABoundedMediaView() throws {
         let ad = StubNativeAd.fixture()
         ad.stubMediaContent.video = true

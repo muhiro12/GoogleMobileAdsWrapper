@@ -184,8 +184,10 @@ The height is the natural height of the assets, up to the proposed height.
 - Media keeps its aspect ratio with aspect-fit scaling inside a region of at
   least 120 × 120 points and at most 320 points tall. Portrait and square
   creatives are letterboxed rather than growing the ad.
-- A compact ad whose response contains video shows a 120-point media region
-  rather than omitting the video.
+- A compact ad whose response contains video shows a minimum-size media region
+  rather than omitting the video. The region also accounts for display scale
+  so a portrait video reaches the 256-pixel longer-dimension minimum
+  (128 points on a 2× display).
 - When the proposed height is smaller than the natural height, the view shrinks
   media to its minimum, then omits the body and advertiser, then truncates the
   headline while keeping at least its first 25 characters visible. The call to
