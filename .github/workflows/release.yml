@@ -1,35 +1,46 @@
 name: Release
 
+# Every push to main publishes the next minor version with the patch reset.
+# Run the workflow manually with an explicit version for a major or patch release.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
     inputs:
       version:
-        description: Semantic version to tag and release, such as 2.0.0
-        required: true
+        description: Explicit MAJOR.MINOR.PATCH version; leave empty for the next minor version
+        required: false
         type: string
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
 
 jobs:
   release:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Create tag and GitHub release
+      - name: Select version
+        id: version
         run: |
-          if ! [[ "$VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Version must be MAJOR.MINOR.PATCH without a prefix."
-            exit 1
-          fi
-          if git rev-parse --verify --quiet "refs/tags/$VERSION" > /dev/null; then
-            echo "::error::Tag $VERSION already exists."
-            exit 1
-          fi
-          gh release create "$VERSION" --target "$GITHUB_SHA" --generate-notes
+          version=$(.github/scripts/next-version.sh "$REQUESTED_VERSION")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
         env:
-          VERSION: ${{ inputs.version }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+
+      - name: Create tag and GitHub release
+        if: steps.version.outputs.version != ''
+        run: gh release create "$VERSION" --target "$GITHUB_SHA" --generate-notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
