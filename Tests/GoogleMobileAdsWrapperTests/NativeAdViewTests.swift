@@ -38,32 +38,87 @@ final class NativeAdViewTests {
     }
 
     @Test
-    func loadStateIsReportedAndUnloadedAdsTakeNoHeight() {
+    func loadStateIsDeliveredAfterTheUpdateAndUnloadedAdsTakeNoHeight() async {
         let (container, loader) = makeView(layout: .compact)
         var states: [NativeAdLoadState] = []
         container.onLoadStateChange = { state in
             states.append(state)
         }
-        #expect(container.loadState == .loading)
+        await settle()
+        #expect(states == [.loading])
         #expect(container.fittingSize(width: 320, height: nil).height == 0)
         container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        // Delivery never happens inside the triggering call.
+        #expect(states == [.loading])
+        await settle()
+        #expect(states == [.loading, .loaded])
         #expect(container.fittingSize(width: 320, height: nil).height > 0)
         container.update(adUnitID: "replacement-unit", layout: .compact)
-        #expect(container.loadState == .loading)
+        await settle()
         container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
-        #expect(states == [.loaded, .loading, .failed])
+        await settle()
+        #expect(states == [.loading, .loaded, .loading, .failed])
         #expect(container.fittingSize(width: 320, height: nil).height == 0)
     }
 
     @Test
-    func failureReportsTheFailedState() {
+    func dismantledViewsStopDeliveringLoadStates() async {
         let (container, loader) = makeView(layout: .media)
         var states: [NativeAdLoadState] = []
         container.onLoadStateChange = { state in
             states.append(state)
         }
         container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
-        #expect(states == [.failed])
+        NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
+        await settle()
+        #expect(states.isEmpty)
+        #expect(container.contentView.isHidden)
+    }
+
+    @Test(arguments: [
+        (NativeAdLayout.compact, CGSize(width: 320, height: 96)),
+        (.compact, CGSize(width: 320, height: 128)),
+        (.media, CGSize(width: 320, height: 320))
+    ])
+    func fixedSlotsStayVisibleAtLargeTextSizes(layout: NativeAdLayout, slot: CGSize) throws {
+        for category in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
+            let (container, loader) = makeView(layout: layout)
+            container.traitOverrides.preferredContentSizeCategory = category
+            container.adLoader(loader, didReceive: StubNativeAd.fixture())
+            container.frame.size = slot
+            container.layoutIfNeeded()
+            let content = container.contentView
+            #expect(!content.isHidden, "\(category.rawValue)")
+            #expect(content.frame.height <= slot.height + 0.5)
+            let headline = try #require(content.headlineView as? UILabel)
+            #expect(headline.font.pointSize >= UIFont.preferredFont(
+                forTextStyle: .headline,
+                compatibleWith: .init(preferredContentSizeCategory: .large)
+            ).pointSize - 0.5)
+            for asset in assets(of: content) {
+                #expect(!asset.hasAmbiguousLayout, "\(type(of: asset))")
+                #expect(asset.frame(in: content).maxY <= content.bounds.height + 0.5)
+            }
+            let button = try #require(content.callToActionView)
+            #expect(!button.isHidden)
+            // A larger proposal restores the reader's larger text.
+            let unconstrained = container.fittingSize(width: slot.width, height: nil)
+            if category.isAccessibilityCategory {
+                #expect(headline.font.pointSize > UIFont.preferredFont(
+                    forTextStyle: .headline,
+                    compatibleWith: .init(preferredContentSizeCategory: .extraExtraExtraLarge)
+                ).pointSize)
+            }
+            #expect(unconstrained.height >= content.frame.height)
+            #expect(container.fittingSize(width: slot.width, height: slot.height).height <= slot.height + 0.5)
+        }
+    }
+
+    @Test
+    func tinySlotsLeaveTheAdEmptyAtAnyTextSize() {
+        let (container, _) = loadedView(layout: .compact, ad: .fixture(), width: 320)
+        container.frame.size = .init(width: 320, height: 30)
+        container.layoutIfNeeded()
         #expect(container.contentView.isHidden)
     }
 
@@ -464,6 +519,12 @@ final class NativeAdViewTests {
             container.layer.render(in: context.cgContext)
         }
         Attachment.record(image, named: "\(name).png")
+    }
+
+    private func settle() async {
+        for _ in 0..<5 {
+            await Task.yield()
+        }
     }
 
     private func loadedView(

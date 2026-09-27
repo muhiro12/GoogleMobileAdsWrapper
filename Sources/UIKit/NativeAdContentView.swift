@@ -14,6 +14,16 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     /// Headlines may only be truncated beyond this many characters.
     static let minimumHeadlineCharacters = 25
 
+    /// Text size limits tried in order: the Dynamic Type bound, then smaller
+    /// fallbacks for bounded space, down to the system default size.
+    static let textSizeLimits: [UIContentSizeCategory] = [
+        .accessibilityMedium,
+        .extraExtraExtraLarge,
+        .extraExtraLarge,
+        .extraLarge,
+        .large
+    ]
+
     private static let adChoicesInset: CGFloat = 28
     private static let iconSize: CGFloat = 40
     private static let spacing: CGFloat = 8
@@ -57,7 +67,7 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         mediaHeightConstraint = adMediaView.heightAnchor.constraint(equalToConstant: Self.minimumMediaHeight)
         super.init(frame: .zero)
         // Bound Dynamic Type so large text reflows instead of producing very tall ads.
-        maximumContentSizeCategory = .accessibilityMedium
+        maximumContentSizeCategory = Self.textSizeLimits[0]
         configureSubviews()
         headlineView = headlineLabel
         bodyView = bodyLabel
@@ -106,14 +116,27 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         guard let nativeAd, width.isFinite, width >= Self.minimumWidth else {
             return nil
         }
-        updateTraitsIfNeeded()
-        for fit in fits(width: width, aspectRatio: nativeAd.mediaContent.aspectRatio) {
-            apply(fit, width: width)
-            let height = measuredHeight(width: width)
-            if let maximumHeight, height > maximumHeight + 0.5 {
+        // Each fit starts from the largest permitted text so a larger proposal
+        // restores the reader's Dynamic Type preference. Smaller text is only a
+        // fallback for bounded space and never goes below the default size.
+        let categories = maximumHeight == nil ? [Self.textSizeLimits[0]] : Self.textSizeLimits
+        var previousCategory: UIContentSizeCategory?
+        for category in categories {
+            maximumContentSizeCategory = category
+            updateTraitsIfNeeded()
+            let effectiveCategory = traitCollection.preferredContentSizeCategory
+            guard effectiveCategory != previousCategory else {
                 continue
             }
-            return .init(width: width, height: height)
+            previousCategory = effectiveCategory
+            for fit in fits(width: width, aspectRatio: nativeAd.mediaContent.aspectRatio) {
+                apply(fit, width: width)
+                let height = measuredHeight(width: width)
+                if let maximumHeight, height > maximumHeight + 0.5 {
+                    continue
+                }
+                return .init(width: width, height: height)
+            }
         }
         return nil
     }

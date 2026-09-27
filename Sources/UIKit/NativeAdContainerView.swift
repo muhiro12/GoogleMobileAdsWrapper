@@ -11,6 +11,8 @@ import OSLog
 
 /// Owns the ad request lifecycle and hosts the registered asset view.
 final class NativeAdContainerView: UIView {
+    typealias MakeAdLoader = @MainActor (String, UIViewController?) -> GoogleMobileAds.AdLoader
+
     /// The width used when SwiftUI proposes no specific width.
     static let idealWidth: CGFloat = 320
 
@@ -19,15 +21,18 @@ final class NativeAdContainerView: UIView {
     private var adUnitID: String
     private var layout: NativeAdLayout
     private var isDismantled = false
-    private let makeAdLoader: (String, UIViewController?) -> GoogleMobileAds.AdLoader
+    private let makeAdLoader: MakeAdLoader
     private var loader: GoogleMobileAds.AdLoader?
     private(set) var contentView: NativeAdContentView
+    private var fittedSize: CGSize?
+    private var deliveredLoadState: NativeAdLoadState?
+    /// Receives the latest load state after the current UIKit or SwiftUI update.
     var onLoadStateChange: ((NativeAdLoadState) -> Void)?
 
     private(set) var loadState = NativeAdLoadState.loading {
         didSet {
             if loadState != oldValue {
-                onLoadStateChange?(loadState)
+                scheduleLoadStateDelivery()
             }
         }
     }
@@ -49,9 +54,7 @@ final class NativeAdContainerView: UIView {
     init(
         adUnitID: String,
         layout: NativeAdLayout,
-        makeAdLoader: @escaping (String, UIViewController?) -> GoogleMobileAds.AdLoader = { adUnitID, controller in
-            .init(adUnitID: adUnitID, rootViewController: controller, adTypes: [.native], options: nil)
-        }
+        makeAdLoader: @escaping MakeAdLoader = makeDefaultAdLoader
     ) {
         self.adUnitID = adUnitID
         self.layout = layout
@@ -61,9 +64,13 @@ final class NativeAdContainerView: UIView {
         contentView.isHidden = true
         addSubview(contentView)
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: NativeAdContainerView, _: UITraitCollection) in
-            view.invalidateIntrinsicContentSize()
-            view.setNeedsLayout()
+            view.invalidateLayout()
         }
+        scheduleLoadStateDelivery()
+    }
+
+    static func makeDefaultAdLoader(adUnitID: String, controller: UIViewController?) -> GoogleMobileAds.AdLoader {
+        .init(adUnitID: adUnitID, rootViewController: controller, adTypes: [.native], options: nil)
     }
 
     @available(*, unavailable)
@@ -83,6 +90,11 @@ final class NativeAdContainerView: UIView {
             contentView.isHidden = true
             return
         }
+        // Refitting changes fonts, which requests another layout pass for the same size.
+        guard fittedSize != bounds.size else {
+            return
+        }
+        fittedSize = bounds.size
         // Explicit app constraints win; an ad that cannot fit them stays hidden.
         let size = contentView.fit(width: bounds.width, maximumHeight: bounds.height)
         contentView.isHidden = size == nil
@@ -97,6 +109,7 @@ final class NativeAdContainerView: UIView {
             cancelLoading()
             self.adUnitID = adUnitID
             loadState = .loading
+            invalidateLayout()
         }
         if self.layout != layout {
             self.layout = layout
@@ -132,7 +145,32 @@ final class NativeAdContainerView: UIView {
         guard loadState == .loaded else {
             return .init(width: width, height: 0)
         }
-        return contentView.fit(width: width, maximumHeight: height) ?? .init(width: width, height: 0)
+        let size = contentView.fit(width: width, maximumHeight: height)
+        // Probing reconfigured the assets, so the next layout pass must refit its bounds.
+        fittedSize = nil
+        setNeedsLayout()
+        return size ?? .init(width: width, height: 0)
+    }
+
+    private func invalidateLayout() {
+        fittedSize = nil
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    private func scheduleLoadStateDelivery() {
+        // Deliver outside the current update so the app can change SwiftUI state safely.
+        Task { @MainActor [weak self] in
+            self?.deliverLoadState()
+        }
+    }
+
+    private func deliverLoadState() {
+        guard isDismantled == false, deliveredLoadState != loadState else {
+            return
+        }
+        deliveredLoadState = loadState
+        onLoadStateChange?(loadState)
     }
 
     private func cancelLoading() {
@@ -155,8 +193,7 @@ final class NativeAdContainerView: UIView {
         nativeAd.rootViewController = presentingViewController
         contentView.display(nativeAd)
         loadState = .loaded
-        invalidateIntrinsicContentSize()
-        setNeedsLayout()
+        invalidateLayout()
     }
 }
 
@@ -174,7 +211,7 @@ extension NativeAdContainerView: GoogleMobileAds.NativeAdLoaderDelegate {
         }
         contentView.clear()
         loadState = .failed
-        invalidateIntrinsicContentSize()
+        invalidateLayout()
         let error = error as NSError
         Self.logger.error("Native ad request failed: \(error.domain, privacy: .public) (\(error.code))")
     }
