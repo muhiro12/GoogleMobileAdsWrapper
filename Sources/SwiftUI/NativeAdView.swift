@@ -11,7 +11,7 @@ import SwiftUI
 ///
 /// The view draws no background, border, or outer padding, so apply them with
 /// ordinary modifiers such as `.padding`, `.background`, and `.frame`. The
-/// call-to-action button follows the inherited UIKit tint color. The ad takes
+/// call-to-action button follows the inherited tint, including `.tint(_:)`. The ad takes
 /// the proposed width, or 320 points when none is proposed, and its natural
 /// height up to any proposed height. Until an ad is loaded, and when the
 /// proposed space is too small for the required assets, the view has no height.

@@ -38,6 +38,11 @@ short arrangement. `.media` adds a bounded media region. `NativeAdLoadState`
 reports `.loading`, `.loaded`, and `.failed` so the app can decide whether to
 show a placeholder, collapse the slot, or keep it.
 
+The load-state closure receives `.loading` once the view is created and then
+each change. Calls arrive asynchronously on the main actor after the current
+view update, so the closure can assign SwiftUI state directly. Rapid changes
+are coalesced into the latest state, and a removed view stops reporting.
+
 If the app also imports `GoogleMobileAds`, qualify the view as
 `GoogleMobileAdsWrapper.NativeAdView` to distinguish it from the SDK's UIKit
 class.
@@ -155,7 +160,7 @@ The ad view draws no background, border, or outer padding. Card styling,
 spacing, and separators belong to the app; apply them with ordinary SwiftUI
 modifiers. Text uses system text styles and semantic colors, and the
 call-to-action button uses a standard filled configuration that follows the
-inherited UIKit tint color.
+inherited tint, including SwiftUI's `.tint(_:)` modifier.
 
 Each layout shows an "Ad" badge next to the advertiser and keeps the top-trailing
 corner clear for the SDK's AdChoices overlay. The badge text is the same in
@@ -174,7 +179,8 @@ The height is the natural height of the assets, up to the proposed height.
 - Narrow widths and accessibility text sizes move the compact call to action
   below the headline instead of switching to the media layout.
 - Dynamic Type is bounded at `accessibilityMedium` so large text reflows without
-  producing very tall ads.
+  producing very tall ads. The ad is not hidden merely because a large text
+  size is selected.
 - Media keeps its aspect ratio with aspect-fit scaling inside a region of at
   least 120 × 120 points and at most 320 points tall. Portrait and square
   creatives are letterboxed rather than growing the ad.
@@ -184,9 +190,16 @@ The height is the natural height of the assets, up to the proposed height.
   media to its minimum, then omits the body and advertiser, then truncates the
   headline while keeping at least its first 25 characters visible. The call to
   action is never truncated.
-- When the space is still too small, or the width is below 160 points, the ad
-  stays empty rather than violating the app's constraints or Google's minimum
-  asset sizes.
+- If that still does not fit, the view repeats those steps with smaller text,
+  stepping down through `extraExtraExtraLarge`, `extraExtraLarge`, and
+  `extraLarge` to the default `large` size, and never smaller. A larger
+  proposal restores the reader's text size. For example, a 320 × 96 point
+  compact slot or a 320 × 320 point media slot with typical copy stays visible
+  at the largest accessibility size.
+- When the space is still too small at the default text size, or the width is
+  below 160 points, the ad stays empty rather than violating the app's
+  constraints or Google's minimum asset sizes. Long copy can need more space
+  than a given slot; there is no guarantee for every fixed size.
 
 Fixed heights cannot guarantee that every creative is shown. Verify placements
 against Google's
@@ -254,9 +267,15 @@ is main-actor isolated; create and use it from `@MainActor` code.
 
 ## Releases
 
-Releases are created manually with the `Release` workflow, which takes an
-explicit `MAJOR.MINOR.PATCH` version and rejects existing tags. Merging to
-`main` no longer publishes a release. The next release is `2.0.0`.
+Versions follow Semantic Versioning from 2.0.0. The `Release` workflow creates
+a tag and GitHub release for every push to `main`, incrementing the minor
+version and resetting the patch version (2.0.0, then 2.1.0). The first automatic
+release after the legacy `1.x` tags is 2.0.0.
+
+For a major or patch release, run the workflow manually with an explicit
+`MAJOR.MINOR.PATCH` version. It must be greater than every existing release
+and at least 2.0.0. `.github/scripts/next-version.sh` selects and validates the
+version; a rerun on an already tagged commit publishes nothing.
 
 ## Tests
 
