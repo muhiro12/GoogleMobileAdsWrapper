@@ -125,6 +125,10 @@ automatic retry loops.
 
 ## Native ad presentation
 
+The SwiftUI interface wraps code-built UIKit assets registered with Google's
+`NativeAdView`; no XIB or storyboard resources are required. Ad loading and
+presentation lifecycle are separate from asset layout.
+
 Both layouts include a localized ad attribution badge (English and Japanese)
 and keep the top-right corner clear for the SDK's AdChoices overlay. Do not
 cover that area with app controls or make the card background a separate

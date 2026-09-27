@@ -8,21 +8,57 @@ import Testing
 final class NativeAdViewTests {
     private var windows: [UIWindow] = []
 
-    @Test
-    func mediumNibHasUnambiguousLayoutBeforeReceivingAnAd() throws {
-        let content = try #require(
-            UINib(nibName: "MediumNativeAdView", bundle: .module)
-                .instantiate(withOwner: nil, options: nil).first as? GoogleMobileAds.NativeAdView
-        )
-        for height in [CGFloat(288), 320, 480] {
-            content.frame = .init(x: 0, y: 0, width: 320, height: height)
-            content.setNeedsLayout()
-            content.layoutIfNeeded()
-            var pending = [content as UIView]
-            while let view = pending.popLast() {
-                #expect(!view.hasAmbiguousLayout, "Ambiguous layout in \(type(of: view))")
-                pending.append(contentsOf: view.subviews)
+    @Test(arguments: NativeAdSize.allCases)
+    func resizingProducesStableUnambiguousAssetLayout(size: NativeAdSize) throws {
+        let (container, loader) = makeView(size: size)
+        let ad = StubNativeAd()
+        ad.stubBody = "A description that wraps as the available width changes."
+        ad.stubCallToAction = "Learn more about this offer"
+        ad.stubAdvertiser = "Example advertiser"
+        ad.stubIcon = .init(image: UIImage())
+        container.adLoader(loader, didReceive: ad)
+        for width in [CGFloat(320), 240, 280, 320] {
+            let fitted = container.fittingSize(width: width)
+            container.frame.size = fitted
+            container.layoutIfNeeded()
+            #expect(container.fittingSize(width: width) == fitted)
+            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+            for asset in [content.headlineView, content.bodyView, content.callToActionView, content.iconView]
+                .compactMap({ $0 }) {
+                #expect(!asset.hasAmbiguousLayout)
+                let frame = asset.convert(asset.bounds, to: content)
+                #expect(frame.minX >= -0.5)
+                #expect(frame.maxX <= width + 0.5)
+                #expect(frame.maxY <= fitted.height + 0.5)
             }
+        }
+    }
+
+    @Test
+    func textSizeChangesReflowTheExistingAdWithoutReloading() throws {
+        let (container, loader) = makeView(size: .small)
+        let ad = StubNativeAd()
+        ad.stubBody = "Description"
+        ad.stubCallToAction = "Learn more"
+        container.adLoader(loader, didReceive: ad)
+        for category in [UIContentSizeCategory.accessibilityExtraExtraExtraLarge, .large] {
+            container.traitOverrides.preferredContentSizeCategory = category
+            container.frame.size = container.fittingSize(width: 280)
+            container.layoutIfNeeded()
+            let content = try #require(container.subviews.first as? GoogleMobileAds.NativeAdView)
+            #expect(content.nativeAd === ad)
+            #expect((content.mediaView != nil) == category.isAccessibilityCategory)
+            #expect(loader.loadCount == 1)
+        }
+    }
+
+    @Test
+    func unspecifiedWidthsProduceFiniteSizes() {
+        let (container, _) = makeView(size: .small)
+        for width in [CGFloat.zero, .infinity, .nan] {
+            let fitted = container.fittingSize(width: width)
+            #expect(fitted.width == NativeAdSize.small.width)
+            #expect(fitted.height.isFinite)
         }
     }
 
