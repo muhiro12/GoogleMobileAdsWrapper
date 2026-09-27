@@ -5,7 +5,6 @@ import PackageDescription
 
 let package = Package(
     name: "GoogleMobileAdsWrapper",
-    defaultLocalization: "en",
     platforms: [
         .iOS(.v17)
     ],

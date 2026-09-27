@@ -311,7 +311,7 @@ final class NativeAdViewTests {
         let label = try #require(content.subviews.first {
             $0.accessibilityIdentifier == "nativeAd.attribution"
         } as? UILabel)
-        #expect(label.text == String(localized: "nativeAd.attribution", bundle: .module))
+        #expect(label.text == "Ad")
         #expect(label.bounds.width >= 15)
         #expect(label.bounds.height >= 15)
         #expect(label.frame.maxX <= content.bounds.width - 64)

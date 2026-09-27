@@ -154,7 +154,7 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     private func configureAttribution(in view: GoogleMobileAds.NativeAdView) {
         view.backgroundColor = .systemBackground
         let label = UILabel()
-        label.text = String(localized: "nativeAd.attribution", bundle: .module)
+        label.text = "Ad"
         label.font = .preferredFont(forTextStyle: .caption1)
         label.textColor = .label
         label.backgroundColor = .secondarySystemBackground
