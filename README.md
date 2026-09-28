@@ -10,38 +10,93 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Usage
 
-On the main actor, call `try await GoogleMobileAdsController.start()` once the app has
-completed any required consent flow. Then place a `NativeAdView`:
+On the main actor, call `try await GoogleMobileAdsController.start()` once the
+app has completed any required consent flow, and load ads only after it returns:
 
 ```swift
 import GoogleMobileAdsWrapper
 import SwiftUI
 
-struct SponsoredRow: View {
+struct FeedView: View {
     let adUnitID: String
-    @State private var loadState = NativeAdLoadState.loading
+    @State private var canShowAds = false
 
     var body: some View {
-        if loadState != .failed {
-            NativeAdView(adUnitID: adUnitID, layout: .compact) { state in
-                loadState = state
+        List {
+            if canShowAds {
+                SponsoredRow(adUnitID: adUnitID)
             }
-            .padding()
-            .background(.background.secondary, in: .rect(cornerRadius: 8))
+        }
+        .task {
+            do {
+                try await GoogleMobileAdsController.start()
+                canShowAds = true
+            } catch {
+                // The task was cancelled; do not start loading ads.
+            }
+        }
+    }
+}
+
+struct SponsoredRow: View {
+    let adUnitID: String
+    @State private var presentationState = NativeAdPresentationState.unavailable
+
+    var body: some View {
+        NativeAdView(
+            adUnitID: adUnitID,
+            layout: .compact,
+            onPresentationStateChange: { state in
+                presentationState = state
+            }
+        )
+        .padding()
+        .background {
+            if presentationState == .ready {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(.background.secondary)
+            }
         }
     }
 }
 ```
 
 `NativeAdLayout.compact` shows the icon, headline, body, and call to action in a
-short arrangement. `.media` adds a bounded media region. `NativeAdLoadState`
-reports `.loading`, `.loaded`, and `.failed` so the app can decide whether to
-show a placeholder, collapse the slot, or keep it.
+short arrangement. `.media` adds a bounded media region.
 
-The load-state closure receives `.loading` once the view is created and then
-each change. Calls arrive asynchronously on the main actor after the current
-view update, so the closure can assign SwiftUI state directly. Rapid changes
-are coalesced into the latest state, and a removed view stops reporting.
+### Load and presentation states
+
+Two independent states let the app make its own placeholder and layout choices:
+
+- `NativeAdLoadState` describes the request: `.loading` while a request is
+  pending or waits for a window, `.loaded` after an ad is received, and
+  `.failed` after a failed request. Use it for placeholders and retry decisions.
+- `NativeAdPresentationState` describes whether the loaded ad fits the space
+  the view was actually laid out with. `.ready` means the registered assets fit
+  and are shown. `.insufficientSpace` means an ad is loaded but its required
+  assets cannot fit that space, so the view stays empty; offering more space
+  shows the same ad without a new request. `.unavailable` covers everything
+  else: loading, failure, a view outside a window, or a new ad awaiting layout.
+
+Neither state reports on-screen visibility or an impression; the SDK measures
+impressions. Presentation reflects committed layout only, not SwiftUI's
+intermediate size measurements, and a large Dynamic Type size alone does not
+make an ad unavailable.
+
+Pass either closure, or both, with a trailing load-state closure followed by
+`onPresentationStateChange:`. Each closure receives the current state once the
+view is created (`.loading` and `.unavailable`) and then each change. Calls
+arrive asynchronously on the main actor after the current view update, so the
+closures can assign SwiftUI state directly. Rapid changes are coalesced into the
+latest state, a load state change is delivered before the presentation state it
+causes, and a removed view stops reporting.
+
+Keep the view in the hierarchy while it is `.unavailable`. Removing it, for
+example with `if presentationState == .ready`, stops its request permanently;
+that view instance never loads or reports again. Style around the view instead,
+as in the example, or collapse surrounding content. Avoid changing the space
+offered to the ad, such as its padding or frame, in response to its own
+presentation state: the new space can change the state again.
 
 If the app also imports `GoogleMobileAds`, qualify the view as
 `GoogleMobileAdsWrapper.NativeAdView` to distinguish it from the SDK's UIKit
@@ -166,10 +221,12 @@ var body: some View {
 }
 ```
 
-Keep the view mounted to retry through `reloadID`. Keep that value stable during
-ordinary updates; do not generate a new value in `body`. Replacing an in-flight
-request disconnects its callbacks; only the newest request can update the view.
-The app chooses when to retry, subject to consent, premium, and lifecycle policy.
+Keep the view mounted to retry through `reloadID`; a view removed after a
+failure cannot be retried this way, and a new view starts a new request. Keep
+that value stable during ordinary updates; do not generate a new value in
+`body`. Replacing an in-flight request disconnects its callbacks; only the
+newest request can update the view. The app chooses when to retry, subject to
+consent, premium, and lifecycle policy.
 
 Changing the ad unit ID starts
 a new request; changing only the layout reuses the loaded ad. Removing the SwiftUI
@@ -183,7 +240,8 @@ retry after failure. Apps retaining a mounted slot across long inactive periods
 can change `reloadID` when their own lifecycle policy calls for a fresh ad.
 
 An internal request object owns the loader and result; the UIKit container owns
-presentation and layout. The SwiftUI view owns that container through
+presentation, layout, and the presentation state derived from its committed
+bounds. The SwiftUI view owns that container through
 `UIViewRepresentable`. Apps do not need a separate observable ad model.
 
 ## Native ad presentation
@@ -290,7 +348,8 @@ NativeAdView(adUnitID: adUnitID, layout: .media)
 ```
 
 - `GoogleMobileAdsController` is a namespace with a static `start()` method.
-  Initialization is asynchronous and cancellable for the caller.
+  Initialization is asynchronous and cancellable for the caller; call it with
+  `try await` and load ads after it returns.
   It no longer takes an ad unit ID; pass that to each `NativeAdView`.
 - `NativeAdSize` and `buildNativeAd(_:)` are removed. `.small` becomes
   `.compact`, and `.medium` becomes `.media`. Map any stored 1.x string IDs
@@ -299,6 +358,9 @@ NativeAdView(adUnitID: adUnitID, layout: .media)
   at most 320 points wide; add `.frame(maxWidth: 320)` to keep that limit. The
   view takes no space until an ad loads and after a failure, so reserve space
   or show a placeholder based on `NativeAdLoadState` if the placement needs it.
+  `NativeAdPresentationState` additionally reports whether a loaded ad fits
+  the space the view was given.
+- `reloadID` requests a replacement ad explicitly; 1.x had no retry input.
 - A compact ad no longer switches to the media layout for accessibility text
   sizes. It keeps a compact arrangement and adds a small media region only for
   video responses.
