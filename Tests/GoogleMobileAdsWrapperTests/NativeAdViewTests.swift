@@ -400,6 +400,38 @@ final class NativeAdViewTests {
         }
     }
 
+    @Test(arguments: [CGFloat(240), 320])
+    func portraitVideoUsesTheFullMediaHeightLimit(width: CGFloat) throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubMediaContent.video = true
+        ad.stubMediaContent.ratio = 9 / 16
+        let (container, _) = loadedView(layout: .media, ad: ad, width: width)
+        let media = try #require(container.contentView.mediaView)
+        #expect(media.bounds.height == NativeAdMetrics.maximumMediaHeight)
+        #expect(media.contentMode == .scaleAspectFit)
+        #expect(container.contentView.bodyView != nil)
+    }
+
+    @Test
+    func boundedMediaOmitsOptionalTextBeforeReducingVideo() throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubMediaContent.video = true
+        ad.stubMediaContent.ratio = 9 / 16
+        let (container, _) = loadedView(layout: .media, ad: ad, width: 320)
+        container.frame.size.height = 400
+        container.layoutIfNeeded()
+        let content = container.contentView
+        let media = try #require(content.mediaView)
+        #expect(content.bodyView == nil)
+        #expect(content.advertiserView == nil)
+        #expect(media.bounds.height > NativeAdContentView.minimumMediaHeight)
+        #expect(media.bounds.height < NativeAdMetrics.maximumMediaHeight)
+        #expect(container.presentationState == .ready)
+        for asset in assets(of: content) {
+            #expect(content.bounds.contains(asset.frame(in: content)))
+        }
+    }
+
     @Test
     func compactPortraitVideoMeetsThePixelMinimumOnTwoScaleDisplays() throws {
         let ad = StubNativeAd.fixture()

@@ -132,7 +132,21 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
             previousCategory = effectiveCategory
             for fit in fits(width: width, aspectRatio: nativeAd.mediaContent.aspectRatio) {
                 apply(fit, width: width)
-                let height = measuredHeight(width: width)
+                var height = measuredHeight(width: width)
+                if let maximumHeight, height > maximumHeight,
+                   usesMedia, !fit.showsBody, !fit.showsAdvertiser,
+                   fit.mediaHeight > effectiveMinimumMediaHeight {
+                    // Keep the largest media region that fits after optional
+                    // text is omitted, instead of jumping to the minimum.
+                    var reducedFit = fit
+                    let availableHeight = fit.mediaHeight - (height - maximumHeight)
+                    reducedFit.mediaHeight = max(
+                        effectiveMinimumMediaHeight,
+                        floor(availableHeight / NativeAdMetrics.gridUnit) * NativeAdMetrics.gridUnit
+                    )
+                    apply(reducedFit, width: width)
+                    height = measuredHeight(width: width)
+                }
                 if let maximumHeight, height > maximumHeight + 0.5 {
                     continue
                 }
@@ -153,14 +167,14 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     private func fits(width: CGFloat, aspectRatio: CGFloat) -> [Fit] {
         var fit = Fit(arrangement: arrangement(width: width), mediaHeight: mediaHeight(width: width, aspectRatio: aspectRatio))
         var fits = [fit]
-        if usesMedia, fit.mediaHeight > effectiveMinimumMediaHeight {
-            fit.mediaHeight = effectiveMinimumMediaHeight
-            fits.append(fit)
-        }
         fit.showsBody = false
         fits.append(fit)
         fit.showsAdvertiser = false
         fits.append(fit)
+        if usesMedia, fit.mediaHeight > effectiveMinimumMediaHeight {
+            fit.mediaHeight = effectiveMinimumMediaHeight
+            fits.append(fit)
+        }
         fit.truncatesHeadline = true
         fits.append(fit)
         return fits
@@ -186,11 +200,14 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
             return effectiveMinimumMediaHeight
         }
         let ratio = aspectRatio.isFinite && aspectRatio > 0 ? aspectRatio : 16 / 9
-        // Tall creatives are letterboxed with aspect fit rather than growing the ad.
-        let maximumHeight = min(
-            max(NativeAdMetrics.mediaHeightLimitBaseline, width * 9 / 16),
-            NativeAdMetrics.maximumMediaHeight
-        )
+        // Videos can use the full height limit; static creatives keep the
+        // more compact image region. Both preserve their aspect ratio.
+        let maximumHeight = displayedAd?.mediaContent.hasVideoContent == true
+            ? NativeAdMetrics.maximumMediaHeight
+            : min(
+                max(NativeAdMetrics.mediaHeightLimitBaseline, width * 9 / 16),
+                NativeAdMetrics.maximumMediaHeight
+            )
         return min(max(width / ratio, effectiveMinimumMediaHeight), max(maximumHeight, effectiveMinimumMediaHeight))
     }
 
