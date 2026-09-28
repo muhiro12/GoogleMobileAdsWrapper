@@ -125,7 +125,7 @@ Use `GoogleMobileAdsConsentController.shared` on the main actor. It wraps UMP's
 SDK operations and reads the current SDK state without storing a separate
 consent boolean. It does not start `MobileAds`, load ads, choose a region's
 policy, request ATT permission, or share consent identifiers across apps.
-Existing ad APIs keep their behavior; adopting this controller is explicit.
+Adopting this controller is explicit.
 
 Create the applicable messages in AdMob Privacy & messaging and configure the
 host app's `GADApplicationIdentifier`. Follow the
@@ -370,7 +370,7 @@ NativeAdView(adUnitID: adUnitID, layout: .media)
   ships localized string resources.
 - The view has no background. Add the card background the app previously
   relied on.
-- Consent operations are unchanged.
+- Consent operations are opt-in through `GoogleMobileAdsConsentController.shared`.
 
 Apps pinned to a 1.x release are unaffected until they update the dependency.
 
