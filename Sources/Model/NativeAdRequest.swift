@@ -7,12 +7,14 @@ final class NativeAdRequest: NSObject {
     typealias MakeAdLoader = @MainActor (String, UIViewController?) -> GoogleMobileAds.AdLoader
 
     private static let logger = Logger(subsystem: "GoogleMobileAdsWrapper", category: "NativeAd")
+    /// Google asks apps not to display ads retained for longer than an hour.
+    private static let expiration = Duration.seconds(3600)
     private let makeAdLoader: MakeAdLoader
-    private let now: () -> TimeInterval
+    private let now: () -> ContinuousClock.Instant
     private var adUnitID: String
     private var reloadID: Int
     private var loader: GoogleMobileAds.AdLoader?
-    private var receivedAt: TimeInterval?
+    private var receivedAt: ContinuousClock.Instant?
     private var isStopped = false
     private(set) var nativeAd: GoogleMobileAds.NativeAd?
     private(set) var state = NativeAdLoadState.loading
@@ -22,7 +24,8 @@ final class NativeAdRequest: NSObject {
         adUnitID: String,
         reloadID: Int,
         makeAdLoader: @escaping MakeAdLoader,
-        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+        // The continuous clock keeps advancing while the device sleeps.
+        now: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now }
     ) {
         self.adUnitID = adUnitID
         self.reloadID = reloadID
@@ -41,7 +44,7 @@ final class NativeAdRequest: NSObject {
 
     /// Recheck retained results when returning to a window, not on a refresh timer.
     func prepareForAttachment() {
-        guard !isStopped, let receivedAt, now() - receivedAt >= 3600 else {
+        guard !isStopped, let receivedAt, receivedAt.duration(to: now()) >= Self.expiration else {
             return
         }
         reset()

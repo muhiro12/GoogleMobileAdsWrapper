@@ -399,6 +399,48 @@ final class NativeAdViewTests {
     }
 
     @Test
+    func reattachingAfterAnHourReplacesTheRetainedAd() throws {
+        let start = ContinuousClock.now
+        var time = start
+        var loaders: [StubAdLoader] = []
+        let container = NativeAdContainerView(
+            adUnitID: "test-unit",
+            layout: .compact,
+            now: {
+                time
+            },
+            makeAdLoader: { adUnitID, _ in
+                let loader = StubAdLoader(adUnitID: adUnitID, rootViewController: nil, adTypes: [.native], options: nil)
+                loaders.append(loader)
+                return loader
+            }
+        )
+        container.frame = .init(x: 0, y: 0, width: 320, height: 600)
+        attach(container)
+        let first = try #require(loaders.first)
+        let ad = StubNativeAd.fixture()
+        container.request.adLoader(first, didReceive: ad)
+        container.removeFromSuperview()
+        time = start + .seconds(3599)
+        attach(container)
+        #expect(container.contentView.nativeAd === ad)
+        #expect(loaders.count == 1)
+
+        container.removeFromSuperview()
+        time = start + .seconds(3600)
+        attach(container)
+        #expect(container.contentView.nativeAd == nil)
+        #expect(container.loadState == .loading)
+        #expect(loaders.count == 2)
+        #expect(first.delegate == nil)
+        container.request.adLoader(first, didReceive: StubNativeAd.fixture())
+        #expect(container.contentView.nativeAd == nil)
+        let replacement = StubNativeAd.fixture()
+        container.request.adLoader(try #require(loaders.last), didReceive: replacement)
+        #expect(container.contentView.nativeAd === replacement)
+    }
+
+    @Test
     func sizeChangeReusesTheLoadedAdInTheNewLayout() throws {
         let (container, loader) = makeView(layout: .compact)
         let originalContent = container.contentView

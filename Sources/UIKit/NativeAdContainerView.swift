@@ -43,7 +43,7 @@ final class NativeAdContainerView: UIView {
         adUnitID: String,
         layout: NativeAdLayout,
         reloadID: Int = 0,
-        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        now: @escaping () -> ContinuousClock.Instant = { ContinuousClock.now },
         makeAdLoader: @escaping MakeAdLoader = makeDefaultAdLoader
     ) {
         self.layout = layout

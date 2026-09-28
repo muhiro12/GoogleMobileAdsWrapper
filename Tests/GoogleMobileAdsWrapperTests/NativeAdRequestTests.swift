@@ -59,12 +59,12 @@ struct NativeAdRequestTests {
         let request = fixture.request
         request.loadIfNeeded(from: fixture.controller)
         request.adLoader(try #require(fixture.loaders.first), didReceive: StubNativeAd.fixture())
-        fixture.time = 3599
+        fixture.time = fixture.start + .seconds(3599)
         request.prepareForAttachment()
         request.loadIfNeeded(from: fixture.controller)
         #expect(request.state == .loaded)
         #expect(fixture.loaders.count == 1)
-        fixture.time = 3600
+        fixture.time = fixture.start + .seconds(3600)
         // No timer interrupts a continuously displayed ad.
         #expect(request.state == .loaded)
         request.prepareForAttachment()
@@ -78,7 +78,8 @@ struct NativeAdRequestTests {
 @MainActor
 private final class RequestFixture {
     let controller = UIViewController()
-    var time: TimeInterval = 0
+    let start = ContinuousClock.now
+    lazy var time = start
     var loaders: [StubAdLoader] = []
     lazy var request = NativeAdRequest(adUnitID: "unit", reloadID: 0, makeAdLoader: { [unowned self] unit, controller in
         let loader = StubAdLoader(adUnitID: unit, rootViewController: controller, adTypes: [.native], options: nil)
