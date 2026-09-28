@@ -150,12 +150,41 @@ are not a claim of regulatory compliance or app release readiness.
 
 ## Loading behavior
 
-Ads load when their view is attached to a window. Changing the ad unit ID starts
+Ads load when their view is attached to a window. Change the `reloadID` value
+(default `0`) to discard the current result and explicitly request another ad:
+
+```swift
+@State private var reloadID = 0
+
+var body: some View {
+    VStack {
+        NativeAdView(adUnitID: adUnitID, reloadID: reloadID)
+        Button("Retry ad") {
+            reloadID += 1
+        }
+    }
+}
+```
+
+Keep the view mounted to retry through `reloadID`. Keep that value stable during
+ordinary updates; do not generate a new value in `body`. Replacing an in-flight
+request disconnects its callbacks; only the newest request can update the view.
+The app chooses when to retry, subject to consent, premium, and lifecycle policy.
+
+Changing the ad unit ID starts
 a new request; changing only the layout reuses the loaded ad. Removing the SwiftUI
 view disconnects pending callbacks and permanently stops requests for that view
 instance, including during later UIKit reattachment. Failed requests report
 `.failed`, take no height, and are logged under the `GoogleMobileAdsWrapper`
-subsystem without automatic retry loops.
+subsystem without automatic retry loops. On window reattachment, a retained ad
+that is at least one hour old is discarded and loaded again. There is no timer
+refreshing a continuously displayed ad, no preloading cache, and no automatic
+retry after failure. Apps retaining a mounted slot across long inactive periods
+can change `reloadID` when their own lifecycle policy calls for a fresh ad.
+
+An internal request object owns the loader and result; the UIKit container owns
+presentation and layout. The SwiftUI view owns that container through
+`UIViewRepresentable`. Apps do not need a separate observable ad model.
 
 ## Native ad presentation
 

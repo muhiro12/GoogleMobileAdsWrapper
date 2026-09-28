@@ -27,7 +27,7 @@ final class NativeAdHostingTests {
         #expect(recorder.renderedState == .loading)
         #expect(loader.loadCount == 1)
 
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         #expect(container.bounds.height > 40)
         #expect(container.bounds.width == 320)
@@ -48,7 +48,7 @@ final class NativeAdHostingTests {
         )
         try await settle(hosting)
         let container = try #require(findContainer(in: hosting.view))
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         let button = try #require(container.contentView.callToActionView)
         let traits = UITraitCollection(userInterfaceStyle: .light)
@@ -75,7 +75,7 @@ final class NativeAdHostingTests {
         try await settle(hosting)
         let container = try #require(findContainer(in: hosting.view))
         let first = try #require(loaders.first)
-        container.adLoader(first, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(first, didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         #expect(recorder.renderedState == .loaded)
 
@@ -84,13 +84,13 @@ final class NativeAdHostingTests {
         #expect(loaders.count == 2)
         #expect(recorder.renderedState == .loading)
         #expect(container.bounds.height == 0)
-        container.adLoader(first, didReceive: StubNativeAd.fixture())
-        container.adLoader(first, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.request.adLoader(first, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(first, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         try await settle(hosting)
         #expect(recorder.renderedState == .loading)
         #expect(container.contentView.nativeAd == nil)
 
-        container.adLoader(try #require(loaders.last), didReceive: StubNativeAd.fixture())
+        container.request.adLoader(try #require(loaders.last), didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         #expect(recorder.renderedState == .loaded)
         #expect(container.bounds.height > 0)
@@ -115,7 +115,7 @@ final class NativeAdHostingTests {
         )
         try await settle(hosting)
         let container = try #require(findContainer(in: hosting.view))
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         let content = container.contentView
         #expect(!content.isHidden)
@@ -144,7 +144,7 @@ final class NativeAdHostingTests {
         )
         try await settle(hosting)
         let container = try #require(findContainer(in: hosting.view))
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         try await settle(hosting)
         let content = container.contentView
         #expect(container.bounds.width == 200)
@@ -172,7 +172,7 @@ final class NativeAdHostingTests {
         let container = try #require(findContainer(in: hosting.view))
         let ad = StubNativeAd.fixture()
         ad.stubMediaContent.ratio = 9 / 16
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         try await settle(hosting)
         let media = try #require(container.contentView.mediaView)
         #expect(!container.contentView.isHidden)
@@ -181,6 +181,39 @@ final class NativeAdHostingTests {
         #expect(media.bounds.height <= NativeAdMetrics.mediaHeightLimitBaseline)
         #expect(media.bounds.height >= NativeAdContentView.minimumMediaHeight)
         #expect(media.contentMode == .scaleAspectFit)
+    }
+
+    @Test
+    func changingReloadIDRetriesWithoutReplacingTheHostedView() async throws {
+        let model = SlotModel()
+        var loaders: [StubAdLoader] = []
+        let hosting = host(
+            ReloadableSlot(model: model) { reloadID in
+                NativeAdView(adUnitID: "unit", layout: .compact, reloadID: reloadID, makeAdLoader: { unit, _ in
+                    let loader = StubAdLoader(adUnitID: unit, rootViewController: nil, adTypes: [.native], options: nil)
+                    loaders.append(loader)
+                    return loader
+                }, onLoadStateChange: { _ in
+                })
+            }
+        )
+        try await settle(hosting)
+        let container = try #require(findContainer(in: hosting.view))
+        let first = try #require(loaders.first)
+        container.request.adLoader(first, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        try await settle(hosting)
+        #expect(container.loadState == .failed)
+        model.reloadID += 1
+        try await settle(hosting)
+        #expect(findContainer(in: hosting.view) === container)
+        #expect(loaders.count == 2)
+        #expect(container.loadState == .loading)
+        container.request.adLoader(first, didReceive: StubNativeAd.fixture())
+        #expect(container.loadState == .loading)
+        container.request.adLoader(try #require(loaders.last), didReceive: StubNativeAd.fixture())
+        try await settle(hosting)
+        #expect(!container.contentView.isHidden)
+        #expect(container.bounds.height > 0)
     }
 
     private func components(of color: UIColor) -> [Int] {
@@ -245,6 +278,7 @@ private final class StateRecorder {
 @Observable
 private final class SlotModel {
     var adUnitID = "first-unit"
+    var reloadID = 0
 }
 
 /// An app-style slot whose SwiftUI state follows the ad's load state.
@@ -277,5 +311,14 @@ private struct AdUnitSwitcher<Ad: View>: View {
             recorder.states.append(state)
             loadState = state
         }
+    }
+}
+
+private struct ReloadableSlot<Ad: View>: View {
+    let model: SlotModel
+    let makeAd: (Int) -> Ad
+
+    var body: some View {
+        makeAd(model.reloadID)
     }
 }

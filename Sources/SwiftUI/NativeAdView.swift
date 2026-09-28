@@ -18,6 +18,7 @@ import SwiftUI
 public struct NativeAdView: View {
     private let adUnitID: String
     private let layout: NativeAdLayout
+    private let reloadID: Int
     private let makeAdLoader: NativeAdContainerView.MakeAdLoader
     private let onLoadStateChange: @MainActor (NativeAdLoadState) -> Void
 
@@ -25,6 +26,9 @@ public struct NativeAdView: View {
     /// - Parameters:
     ///   - adUnitID: The native ad unit ID.
     ///   - layout: The asset arrangement.
+    ///   - reloadID: Change this value to discard the current ad and request another.
+    ///     Keep it stable during ordinary view updates. Multiple changes in one
+    ///     SwiftUI update produce only the latest request.
     ///   - onLoadStateChange: Called with `.loading` after the view appears and
     ///     then whenever the request state changes, for example to show an
     ///     app-owned placeholder while loading or after a failure. Calls arrive
@@ -33,12 +37,14 @@ public struct NativeAdView: View {
     public init(
         adUnitID: String,
         layout: NativeAdLayout = .compact,
+        reloadID: Int = 0,
         onLoadStateChange: @escaping @MainActor (NativeAdLoadState) -> Void = { _ in
         }
     ) {
         self.init(
             adUnitID: adUnitID,
             layout: layout,
+            reloadID: reloadID,
             makeAdLoader: NativeAdContainerView.makeDefaultAdLoader,
             onLoadStateChange: onLoadStateChange
         )
@@ -47,11 +53,13 @@ public struct NativeAdView: View {
     init(
         adUnitID: String,
         layout: NativeAdLayout,
+        reloadID: Int = 0,
         makeAdLoader: @escaping NativeAdContainerView.MakeAdLoader,
         onLoadStateChange: @escaping @MainActor (NativeAdLoadState) -> Void
     ) {
         self.adUnitID = adUnitID
         self.layout = layout
+        self.reloadID = reloadID
         self.makeAdLoader = makeAdLoader
         self.onLoadStateChange = onLoadStateChange
     }
@@ -60,6 +68,7 @@ public struct NativeAdView: View {
         NativeAdViewRepresentable(
             adUnitID: adUnitID,
             layout: layout,
+            reloadID: reloadID,
             makeAdLoader: makeAdLoader,
             onLoadStateChange: onLoadStateChange
         )
@@ -69,20 +78,21 @@ public struct NativeAdView: View {
 struct NativeAdViewRepresentable {
     let adUnitID: String
     let layout: NativeAdLayout
+    let reloadID: Int
     let makeAdLoader: NativeAdContainerView.MakeAdLoader
     let onLoadStateChange: @MainActor (NativeAdLoadState) -> Void
 }
 
 extension NativeAdViewRepresentable: UIViewRepresentable {
     func makeUIView(context: Context) -> NativeAdContainerView {
-        let view = NativeAdContainerView(adUnitID: adUnitID, layout: layout, makeAdLoader: makeAdLoader)
+        let view = NativeAdContainerView(adUnitID: adUnitID, layout: layout, reloadID: reloadID, makeAdLoader: makeAdLoader)
         view.onLoadStateChange = onLoadStateChange
         return view
     }
 
     func updateUIView(_ uiView: NativeAdContainerView, context: Context) {
         uiView.onLoadStateChange = onLoadStateChange
-        uiView.update(adUnitID: adUnitID, layout: layout)
+        uiView.update(adUnitID: adUnitID, layout: layout, reloadID: reloadID)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: NativeAdContainerView, context: Context) -> CGSize? {

@@ -47,7 +47,7 @@ final class NativeAdViewTests {
         await settle()
         #expect(states == [.loading])
         #expect(container.fittingSize(width: 320, height: nil).height == 0)
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         // Delivery never happens inside the triggering call.
         #expect(states == [.loading])
         await settle()
@@ -55,7 +55,7 @@ final class NativeAdViewTests {
         #expect(container.fittingSize(width: 320, height: nil).height > 0)
         container.update(adUnitID: "replacement-unit", layout: .compact)
         await settle()
-        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.request.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         await settle()
         #expect(states == [.loading, .loaded, .loading, .failed])
         #expect(container.fittingSize(width: 320, height: nil).height == 0)
@@ -68,7 +68,7 @@ final class NativeAdViewTests {
         container.onLoadStateChange = { state in
             states.append(state)
         }
-        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.request.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
         await settle()
         #expect(states.isEmpty)
@@ -84,7 +84,7 @@ final class NativeAdViewTests {
         for category in [UIContentSizeCategory.large, .accessibilityExtraExtraExtraLarge] {
             let (container, loader) = makeView(layout: layout)
             container.traitOverrides.preferredContentSizeCategory = category
-            container.adLoader(loader, didReceive: StubNativeAd.fixture())
+            container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
             container.frame.size = slot
             container.layoutIfNeeded()
             let content = container.contentView
@@ -288,14 +288,14 @@ final class NativeAdViewTests {
         let (container, loader) = makeView(layout: .media)
         let content = container.contentView
         let ad = StubNativeAd()
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         container.layoutIfNeeded()
         #expect(content.bodyView?.isHidden == true)
         #expect(content.iconView?.isHidden == true)
         #expect(content.advertiserView?.isHidden == true)
         #expect(content.callToActionView?.isHidden == true)
 
-        container.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         container.layoutIfNeeded()
         #expect(content.bodyView?.isHidden == false)
         #expect(content.iconView?.isHidden == false)
@@ -389,7 +389,7 @@ final class NativeAdViewTests {
     func movingWindowsUpdatesPresentationWithoutReloading() {
         let (container, loader) = makeView(layout: .compact)
         let ad = StubNativeAd()
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         #expect(ad.rootViewController === container.window?.rootViewController)
         container.removeFromSuperview()
         #expect(ad.rootViewController == nil)
@@ -403,7 +403,7 @@ final class NativeAdViewTests {
         let (container, loader) = makeView(layout: .compact)
         let originalContent = container.contentView
         let ad = StubNativeAd()
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .media)
         let content = container.contentView
         #expect(content !== originalContent)
@@ -438,9 +438,9 @@ final class NativeAdViewTests {
         let secondLoader = try #require(loaders.last)
         let content = container.contentView
         let newAd = StubNativeAd()
-        container.adLoader(secondLoader, didReceive: newAd)
-        container.adLoader(firstLoader, didReceive: StubNativeAd())
-        container.adLoader(firstLoader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.request.adLoader(secondLoader, didReceive: newAd)
+        container.request.adLoader(firstLoader, didReceive: StubNativeAd())
+        container.request.adLoader(firstLoader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         #expect(content.nativeAd === newAd)
         #expect(!content.isHidden)
     }
@@ -450,13 +450,13 @@ final class NativeAdViewTests {
         let (container, loader) = makeView(layout: .compact)
         let content = container.contentView
         let ad = StubNativeAd()
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
         #expect(loader.delegate == nil)
         #expect(ad.rootViewController == nil)
         #expect(content.nativeAd == nil)
         #expect(content.isHidden)
-        container.adLoader(loader, didReceive: StubNativeAd())
+        container.request.adLoader(loader, didReceive: StubNativeAd())
         #expect(content.nativeAd == nil)
         #expect(content.isHidden)
     }
@@ -480,7 +480,7 @@ final class NativeAdViewTests {
     func failedRequestDoesNotRetryOnUnchangedSwiftUIUpdates() throws {
         let (container, loader) = makeView(layout: .compact)
         let content = container.contentView
-        container.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.request.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
         for _ in 0..<3 {
             container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .compact)
         }
@@ -586,7 +586,7 @@ final class NativeAdViewTests {
         if let category {
             container.traitOverrides.preferredContentSizeCategory = category
         }
-        container.adLoader(loader, didReceive: ad)
+        container.request.adLoader(loader, didReceive: ad)
         container.frame.size = container.fittingSize(width: width, height: nil)
         container.layoutIfNeeded()
         return (container, loader)

@@ -7,31 +7,22 @@
 //
 
 import GoogleMobileAds
-import OSLog
 
 /// Owns the ad request lifecycle and hosts the registered asset view.
 final class NativeAdContainerView: UIView {
-    typealias MakeAdLoader = @MainActor (String, UIViewController?) -> GoogleMobileAds.AdLoader
+    typealias MakeAdLoader = NativeAdRequest.MakeAdLoader
 
-    private static let logger = Logger(subsystem: "GoogleMobileAdsWrapper", category: "NativeAd")
-
-    private var adUnitID: String
     private var layout: NativeAdLayout
     private var isDismantled = false
-    private let makeAdLoader: MakeAdLoader
-    private var loader: GoogleMobileAds.AdLoader?
+    let request: NativeAdRequest
     private(set) var contentView: NativeAdContentView
     private var fittedSize: CGSize?
     private var deliveredLoadState: NativeAdLoadState?
     /// Receives the latest load state after the current UIKit or SwiftUI update.
     var onLoadStateChange: ((NativeAdLoadState) -> Void)?
 
-    private(set) var loadState = NativeAdLoadState.loading {
-        didSet {
-            if loadState != oldValue {
-                scheduleLoadStateDelivery()
-            }
-        }
+    var loadState: NativeAdLoadState {
+        request.state
     }
 
     private var presentingViewController: UIViewController? {
@@ -51,14 +42,18 @@ final class NativeAdContainerView: UIView {
     init(
         adUnitID: String,
         layout: NativeAdLayout,
+        reloadID: Int = 0,
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
         makeAdLoader: @escaping MakeAdLoader = makeDefaultAdLoader
     ) {
-        self.adUnitID = adUnitID
         self.layout = layout
-        self.makeAdLoader = makeAdLoader
+        request = .init(adUnitID: adUnitID, reloadID: reloadID, makeAdLoader: makeAdLoader, now: now)
         contentView = .init(layout: layout)
         super.init(frame: .zero)
         contentView.isHidden = true
+        request.onChange = { [weak self] in
+            self?.requestDidChange()
+        }
         addSubview(contentView)
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: NativeAdContainerView, _: UITraitCollection) in
             view.invalidateLayout()
@@ -77,6 +72,9 @@ final class NativeAdContainerView: UIView {
 
     override func didMoveToWindow() {
         super.didMoveToWindow()
+        if window != nil {
+            request.prepareForAttachment()
+        }
         contentView.nativeAd?.rootViewController = presentingViewController
         loadAdIfNeeded()
     }
@@ -98,16 +96,11 @@ final class NativeAdContainerView: UIView {
         contentView.frame = .init(origin: .zero, size: size ?? .zero)
     }
 
-    func update(adUnitID: String, layout: NativeAdLayout) {
+    func update(adUnitID: String, layout: NativeAdLayout, reloadID: Int = 0) {
         guard isDismantled == false else {
             return
         }
-        if self.adUnitID != adUnitID {
-            cancelLoading()
-            self.adUnitID = adUnitID
-            loadState = .loading
-            invalidateLayout()
-        }
+        request.update(adUnitID: adUnitID, reloadID: reloadID)
         if self.layout != layout {
             self.layout = layout
             let nativeAd = contentView.nativeAd
@@ -126,7 +119,8 @@ final class NativeAdContainerView: UIView {
 
     func dismantle() {
         isDismantled = true
-        cancelLoading()
+        request.stop()
+        contentView.clear()
     }
 
     /// Returns the size for a SwiftUI proposal. Unloaded and unfittable ads take no height.
@@ -170,46 +164,23 @@ final class NativeAdContainerView: UIView {
         onLoadStateChange?(loadState)
     }
 
-    private func cancelLoading() {
-        loader?.delegate = nil
-        loader = nil
-        contentView.clear()
+    private func loadAdIfNeeded() {
+        request.loadIfNeeded(from: presentingViewController)
     }
 
-    private func loadAdIfNeeded() {
-        guard isDismantled == false, loader == nil, let controller = presentingViewController else {
-            return
+    private func requestDidChange() {
+        contentView.clear()
+        if let nativeAd = request.nativeAd {
+            display(nativeAd)
+        } else {
+            invalidateLayout()
         }
-        let loader = makeAdLoader(adUnitID, controller)
-        self.loader = loader
-        loader.delegate = self
-        loader.load(GoogleMobileAds.Request())
+        scheduleLoadStateDelivery()
     }
 
     private func display(_ nativeAd: GoogleMobileAds.NativeAd) {
         nativeAd.rootViewController = presentingViewController
         contentView.display(nativeAd)
-        loadState = .loaded
         invalidateLayout()
-    }
-}
-
-extension NativeAdContainerView: GoogleMobileAds.NativeAdLoaderDelegate {
-    func adLoader(_ adLoader: GoogleMobileAds.AdLoader, didReceive nativeAd: GoogleMobileAds.NativeAd) {
-        guard adLoader === loader else {
-            return
-        }
-        display(nativeAd)
-    }
-
-    func adLoader(_ adLoader: GoogleMobileAds.AdLoader, didFailToReceiveAdWithError error: Error) {
-        guard adLoader === loader else {
-            return
-        }
-        contentView.clear()
-        loadState = .failed
-        invalidateLayout()
-        let error = error as NSError
-        Self.logger.error("Native ad request failed: \(error.domain, privacy: .public) (\(error.code))")
     }
 }
