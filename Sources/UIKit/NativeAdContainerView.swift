@@ -13,9 +13,6 @@ import OSLog
 final class NativeAdContainerView: UIView {
     typealias MakeAdLoader = @MainActor (String, UIViewController?) -> GoogleMobileAds.AdLoader
 
-    /// The width used when SwiftUI proposes no specific width.
-    static let idealWidth: CGFloat = 320
-
     private static let logger = Logger(subsystem: "GoogleMobileAdsWrapper", category: "NativeAd")
 
     private var adUnitID: String
@@ -138,7 +135,7 @@ final class NativeAdContainerView: UIView {
         // SwiftUI may propose zero, infinity, or nothing while probing sizes.
         let width = width.flatMap { width in
             width.isFinite && width > 0 ? width : nil
-        } ?? Self.idealWidth
+        } ?? NativeAdMetrics.idealWidth
         let height = height.flatMap { height in
             height.isFinite && height > 0 ? height : nil
         }

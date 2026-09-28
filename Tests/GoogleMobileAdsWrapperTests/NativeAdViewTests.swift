@@ -31,7 +31,7 @@ final class NativeAdViewTests {
         let (container, _) = loadedView(layout: .compact, ad: .fixture(), width: 320)
         for width in [CGFloat?.none, 0, .infinity, .nan] {
             let fitted = container.fittingSize(width: width, height: .infinity)
-            #expect(fitted.width == NativeAdContainerView.idealWidth)
+            #expect(fitted.width == NativeAdMetrics.idealWidth)
             #expect(fitted.height > 0)
             #expect(fitted.height.isFinite)
         }
@@ -243,9 +243,11 @@ final class NativeAdViewTests {
             #expect(media.contentMode == .scaleAspectFit)
             #expect(media.bounds.width == width)
             #expect(media.bounds.height >= NativeAdContentView.minimumMediaHeight)
-            #expect(media.bounds.height <= min(max(180, width * 9 / 16), 320) + 0.5)
+            let limit = min(max(NativeAdMetrics.mediaHeightLimitBaseline, width * 9 / 16), NativeAdMetrics.maximumMediaHeight)
+            #expect(media.bounds.height <= limit + 0.5)
             if ratio >= 16 / 9 {
-                #expect(abs(media.bounds.height - max(120, width / ratio)) < 1 || media.bounds.height >= 180 - 0.5)
+                // Wide creatives keep their natural, unsnapped height.
+                #expect(abs(media.bounds.height - max(120, width / ratio)) < 1 || media.bounds.height >= limit - 0.5)
             }
         }
     }
@@ -323,10 +325,42 @@ final class NativeAdViewTests {
         #expect(badge.text == "Ad")
         #expect(badge.bounds.width >= 15)
         #expect(badge.bounds.height >= 15)
-        let adChoicesCorner = CGRect(x: content.bounds.width - 28, y: 0, width: 28, height: 20)
+        let inset = NativeAdMetrics.adChoicesInset
+        let adChoicesCorner = CGRect(x: content.bounds.width - inset, y: 0, width: inset, height: 20)
         for asset in assets(of: content) + [badge] {
             #expect(!asset.frame(in: content).intersects(adChoicesCorner))
         }
+    }
+
+    @Test
+    func fixedDesignDimensionsFollowTheEightPointGrid() throws {
+        let dimensions = [
+            NativeAdMetrics.spacing, NativeAdMetrics.iconSize, NativeAdMetrics.iconCornerRadius,
+            NativeAdMetrics.adChoicesInset, NativeAdMetrics.minimumRowTextWidth, NativeAdMetrics.minimumWidth,
+            NativeAdMetrics.idealWidth, NativeAdMetrics.mediaHeightLimitBaseline, NativeAdMetrics.maximumMediaHeight,
+            NativeAdMetrics.badgeMinimumWidth, NativeAdMetrics.badgeMinimumHeight,
+            NativeAdMetrics.badgeHorizontalPadding, NativeAdMetrics.badgeCornerRadius
+        ]
+        for dimension in dimensions {
+            #expect(dimension > 0)
+            #expect(dimension.truncatingRemainder(dividingBy: 8) == 0, "\(dimension)")
+        }
+        // At the default text size, the laid-out fixed geometry lands on the grid too.
+        let (container, _) = loadedView(layout: .compact, ad: .fixture(), width: 320, category: .large)
+        let content = container.contentView
+        let icon = try #require(content.iconView)
+        let headline = try #require(content.headlineView)
+        let body = try #require(content.bodyView)
+        let badge = try #require(findView(in: content) { view in
+            view.accessibilityIdentifier == "nativeAd.attribution"
+        })
+        #expect(icon.bounds.size == .init(width: 40, height: 40))
+        #expect(icon.layer.cornerRadius == 8)
+        #expect(badge.layer.cornerRadius == 8)
+        #expect(badge.bounds.width == 32)
+        #expect(badge.bounds.height == 16)
+        #expect(abs(headline.frame(in: content).minX - icon.frame(in: content).maxX - 8) < 0.01)
+        #expect(abs(body.frame(in: content).minY - headline.frame(in: content).maxY - 8) < 0.01)
     }
 
     @Test
@@ -615,7 +649,7 @@ final class NativeAdViewTests {
     }
 }
 
-private extension UIView {
+extension UIView {
     func frame(in view: UIView) -> CGRect {
         convert(bounds, to: view)
     }

@@ -27,7 +27,7 @@ struct SponsoredRow: View {
                 loadState = state
             }
             .padding()
-            .background(.background.secondary, in: .rect(cornerRadius: 12))
+            .background(.background.secondary, in: .rect(cornerRadius: 8))
         }
     }
 }
@@ -160,7 +160,9 @@ The ad view draws no background, border, or outer padding. Card styling,
 spacing, and separators belong to the app; apply them with ordinary SwiftUI
 modifiers. Text uses system text styles and semantic colors, and the
 call-to-action button uses a standard filled configuration that follows the
-inherited tint, including SwiftUI's `.tint(_:)` modifier.
+inherited tint, including SwiftUI's `.tint(_:)` modifier. Fixed spacing, icon,
+badge, and corner dimensions follow an eight-point grid; text, button, and
+media sizes stay natural to their content.
 
 Each layout shows an "Ad" badge next to the advertiser and keeps the top-trailing
 corner clear for the SDK's AdChoices overlay. The badge text is the same in
