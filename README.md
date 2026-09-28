@@ -10,8 +10,8 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Usage
 
-On the main actor, call `GoogleMobileAdsController(adUnitID:).start()` once the
-app has completed any required consent flow. Then place a `NativeAdView`:
+On the main actor, call `GoogleMobileAdsController.start()` once the app has
+completed any required consent flow. Then place a `NativeAdView`:
 
 ```swift
 import GoogleMobileAdsWrapper
@@ -235,24 +235,31 @@ and Store declarations remain host-app or publisher responsibilities.
 
 ### 2.0
 
-2.0 replaces the controller-built views with a public SwiftUI view:
+2.0 removes the 1.x controller-built views and the controller instance. Code
+that uses them does not compile after updating; replace the calls as follows:
 
 ```swift
 // 1.x
+let controller = GoogleMobileAdsController(adUnitID: adUnitID)
+controller.start()
 controller.buildNativeAd(.small)
 controller.buildNativeAd("Medium")
 
 // 2.0
+GoogleMobileAdsController.start()
 NativeAdView(adUnitID: adUnitID, layout: .compact)
 NativeAdView(adUnitID: adUnitID, layout: .media)
 ```
 
-- `buildNativeAd(_:)` and `NativeAdSize` remain as deprecated shims. They keep
-  the 1.x maximum width of 320 points; `NativeAdSize.layout` maps a legacy size
-  to `NativeAdLayout`.
-- `NativeAdView` has no maximum width and no minimum height. It takes no space
-  until an ad loads and after a failure, so reserve space or show a placeholder
-  based on `NativeAdLoadState` if the placement needs it.
+- `GoogleMobileAdsController` is a namespace with a static `start()` method.
+  It no longer takes an ad unit ID; pass that to each `NativeAdView`.
+- `NativeAdSize` and `buildNativeAd(_:)` are removed. `.small` becomes
+  `.compact`, and `.medium` becomes `.media`. Map any stored 1.x string IDs
+  ("Small", "Medium") to `NativeAdLayout` in the app.
+- `NativeAdView` has no maximum width and no minimum height. The 1.x views were
+  at most 320 points wide; add `.frame(maxWidth: 320)` to keep that limit. The
+  view takes no space until an ad loads and after a failure, so reserve space
+  or show a placeholder based on `NativeAdLoadState` if the placement needs it.
 - A compact ad no longer switches to the media layout for accessibility text
   sizes. It keeps a compact arrangement and adds a small media region only for
   video responses.
@@ -260,12 +267,9 @@ NativeAdView(adUnitID: adUnitID, layout: .media)
   ships localized string resources.
 - The view has no background. Add the card background the app previously
   relied on.
-- Consent operations and `GoogleMobileAdsController.start()` are unchanged.
+- Consent operations are unchanged.
 
-### 1.x Swift 6
-
-The package compiles in Swift 6 language mode. `GoogleMobileAdsController`
-is main-actor isolated; create and use it from `@MainActor` code.
+Apps pinned to a 1.x release are unaffected until they update the dependency.
 
 ## Releases
 
