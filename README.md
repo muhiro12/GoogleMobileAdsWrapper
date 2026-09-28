@@ -10,7 +10,7 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 
 ## Usage
 
-On the main actor, call `GoogleMobileAdsController.start()` once the app has
+On the main actor, call `try await GoogleMobileAdsController.start()` once the app has
 completed any required consent flow. Then place a `NativeAdView`:
 
 ```swift
@@ -56,6 +56,13 @@ during development.
 
 SDK upgrades follow Google's [release notes](https://developers.google.com/admob/ios/rel-notes)
 and [migration guide](https://developers.google.com/admob/ios/migration).
+
+Concurrent and subsequent `start()` calls share one initialization. Complete
+consent and audience settings before the first call. Waiting ends when the SDK
+reports initialization completion, including its timeout; this does not promise
+that every mediation adapter is ready. A cancelled caller waits for that shared
+operation to finish and then throws `CancellationError`, so it must not proceed
+to load ads. An already-cancelled caller does not start the SDK.
 
 ## Consent operations
 
@@ -248,12 +255,13 @@ controller.buildNativeAd(.small)
 controller.buildNativeAd("Medium")
 
 // 2.0
-GoogleMobileAdsController.start()
+try await GoogleMobileAdsController.start()
 NativeAdView(adUnitID: adUnitID, layout: .compact)
 NativeAdView(adUnitID: adUnitID, layout: .media)
 ```
 
 - `GoogleMobileAdsController` is a namespace with a static `start()` method.
+  Initialization is asynchronous and cancellable for the caller.
   It no longer takes an ad unit ID; pass that to each `NativeAdView`.
 - `NativeAdSize` and `buildNativeAd(_:)` are removed. `.small` becomes
   `.compact`, and `.medium` becomes `.media`. Map any stored 1.x string IDs
