@@ -227,6 +227,42 @@ final class NativeAdViewTests {
     }
 
     @Test
+    func narrowVideoFitsAfterLargeTextAndHeightChanges() async {
+        let ad = StubNativeAd.fixture()
+        ad.stubHeadline = "Test mode: 広告主のオンラインストアをご紹介"
+        ad.stubCallToAction = "開く"
+        ad.stubMediaContent.video = true
+        let (container, _) = loadedView(layout: .media, ad: ad, width: 240, category: .accessibilityExtraExtraExtraLarge)
+        for height in [CGFloat(320), 640, 320] {
+            _ = container.fittingSize(width: 240, height: height)
+            container.frame.size = .init(width: 240, height: height)
+            container.layoutIfNeeded()
+            await settle()
+            container.layoutIfNeeded()
+            let content = container.contentView
+            #expect(container.presentationState == .ready)
+            for asset in assets(of: content) {
+                #expect(content.bounds.contains(asset.frame(in: content)), "\(type(of: asset)): \(asset.frame(in: content)) in \(content.bounds)")
+            }
+        }
+    }
+
+    @Test
+    func multilineAdvertiserDoesNotStretchTheAttributionBadge() throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubAdvertiser = "An advertiser with a long name that wraps across several lines"
+        let (container, _) = loadedView(layout: .media, ad: ad, width: 240, category: .accessibilityExtraExtraExtraLarge)
+        let content = container.contentView
+        let advertiser = try #require(content.advertiserView)
+        let badge = try #require(findView(in: content) { view in
+            view.accessibilityIdentifier == "nativeAd.attribution"
+        } as? UILabel)
+        #expect(advertiser.bounds.height > badge.bounds.height)
+        #expect(badge.bounds.height <= max(NativeAdMetrics.badgeMinimumHeight, ceil(badge.intrinsicContentSize.height)))
+        #expect(content.bounds.contains(advertiser.frame(in: content)))
+    }
+
+    @Test
     func tinySlotsLeaveTheAdEmptyAtAnyTextSize() {
         let (container, _) = loadedView(layout: .compact, ad: .fixture(), width: 320)
         container.frame.size = .init(width: 320, height: 30)
@@ -303,7 +339,7 @@ final class NativeAdViewTests {
             }
             #expect(size.height <= maximumHeight)
             // Optional assets are omitted before required text is truncated.
-            #expect(content.bodyView?.isHidden == true)
+            #expect(content.bodyView == nil)
             if content.advertiserView?.isHidden == false {
                 #expect(headline.numberOfLines == 0)
             }
@@ -311,7 +347,7 @@ final class NativeAdViewTests {
         }
         let tight = try #require(smallest)
         #expect(content.fit(width: 240, maximumHeight: tight.height) == tight)
-        #expect(content.advertiserView?.isHidden == true)
+        #expect(content.advertiserView == nil)
         #expect(headline.numberOfLines > 0)
         container.frame.size = tight
         container.layoutIfNeeded()
@@ -402,10 +438,10 @@ final class NativeAdViewTests {
         let ad = StubNativeAd()
         container.request.adLoader(loader, didReceive: ad)
         container.layoutIfNeeded()
-        #expect(content.bodyView?.isHidden == true)
-        #expect(content.iconView?.isHidden == true)
-        #expect(content.advertiserView?.isHidden == true)
-        #expect(content.callToActionView?.isHidden == true)
+        #expect(content.bodyView == nil)
+        #expect(content.iconView == nil)
+        #expect(content.advertiserView == nil)
+        #expect(content.callToActionView == nil)
 
         container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
         container.layoutIfNeeded()
@@ -414,6 +450,85 @@ final class NativeAdViewTests {
         #expect(content.advertiserView?.isHidden == false)
         #expect(content.callToActionView?.isHidden == false)
         #expect((content.bodyView as? UILabel)?.text == StubNativeAd.fixture().body)
+    }
+
+    @Test
+    func SDKRegistrationWaitsForTheCommittedLayout() throws {
+        let (container, loader) = makeView(layout: .compact)
+        container.frame.size.height = 0
+        let ad = StubNativeAd.fixture()
+        container.request.adLoader(loader, didReceive: ad)
+        #expect(container.loadState == .loaded)
+        #expect(container.contentView.nativeAd == nil)
+        let size = container.fittingSize(width: 320, height: nil)
+        #expect(size.height > 0)
+        #expect(container.contentView.nativeAd == nil)
+        container.frame.size = size
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd === ad)
+        container.frame.size.height = 20
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd == nil)
+        container.frame.size = size
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd === ad)
+        #expect(loader.loadCount == 1)
+    }
+
+    @Test
+    func attachingAnAdMeasuredOffWindowRegistersItsCommittedLayout() {
+        let (container, loader) = makeView(layout: .compact)
+        container.removeFromSuperview()
+        let ad = StubNativeAd.fixture()
+        container.request.adLoader(loader, didReceive: ad)
+        container.frame.size = container.fittingSize(width: 320, height: nil)
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd == nil)
+        attach(container)
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd === ad)
+        container.removeFromSuperview()
+        #expect(container.contentView.nativeAd == nil)
+        attach(container)
+        container.layoutIfNeeded()
+        #expect(container.contentView.nativeAd === ad)
+        #expect(loader.loadCount == 1)
+    }
+
+    @Test(arguments: NativeAdLayout.allCases)
+    func missingAdvertiserIsNotRegisteredWithTheSDK(layout: NativeAdLayout) throws {
+        let ad = StubNativeAd.fixture()
+        ad.stubAdvertiser = nil
+        let (container, _) = loadedView(layout: layout, ad: ad, width: 320)
+        let content = container.contentView
+        #expect(content.advertiserView == nil)
+        #expect(content.headlineView != nil)
+        #expect(content.bodyView != nil)
+        #expect(content.callToActionView != nil)
+        for asset in assets(of: content) {
+            let frame = asset.frame(in: content)
+            #expect(frame.minX >= -0.5)
+            #expect(frame.minY >= -0.5)
+            #expect(frame.maxX <= content.bounds.width + 0.5)
+            #expect(frame.maxY <= content.bounds.height + 0.5)
+        }
+    }
+
+    @Test(arguments: NativeAdLayout.allCases)
+    func registeredAssetsStayStrictlyInsideTheAdBounds(layout: NativeAdLayout) {
+        for width in [CGFloat(240), 320, 360] {
+            for advertiser in [String?.none, "Example advertiser", "広告主の長い名前を表示するテスト"] {
+                let ad = StubNativeAd.fixture()
+                ad.stubAdvertiser = advertiser
+                ad.stubCallToAction = "Install Now"
+                let (container, _) = loadedView(layout: layout, ad: ad, width: width)
+                let content = container.contentView
+                for asset in assets(of: content) {
+                    let frame = asset.frame(in: content)
+                    #expect(content.bounds.contains(frame), "\(type(of: asset)): \(frame) in \(content.bounds)")
+                }
+            }
+        }
     }
 
     @Test(arguments: NativeAdLayout.allCases)
@@ -535,6 +650,7 @@ final class NativeAdViewTests {
         container.removeFromSuperview()
         time = start + .seconds(3599)
         attach(container)
+        container.layoutIfNeeded()
         #expect(container.contentView.nativeAd === ad)
         #expect(loaders.count == 1)
 
@@ -549,6 +665,7 @@ final class NativeAdViewTests {
         #expect(container.contentView.nativeAd == nil)
         let replacement = StubNativeAd.fixture()
         container.request.adLoader(try #require(loaders.last), didReceive: replacement)
+        container.layoutIfNeeded()
         #expect(container.contentView.nativeAd === replacement)
     }
 
@@ -563,6 +680,7 @@ final class NativeAdViewTests {
         #expect(content !== originalContent)
         #expect(originalContent.nativeAd == nil)
         #expect(content.mediaView != nil)
+        container.layoutIfNeeded()
         #expect(content.nativeAd === ad)
         #expect(loader.loadCount == 1)
         #expect(container.subviews.count == 1)
@@ -595,6 +713,10 @@ final class NativeAdViewTests {
         container.request.adLoader(secondLoader, didReceive: newAd)
         container.request.adLoader(firstLoader, didReceive: StubNativeAd())
         container.request.adLoader(firstLoader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        #expect(container.request.nativeAd === newAd)
+        #expect(content.nativeAd == nil)
+        container.frame.size = container.fittingSize(width: 320, height: nil)
+        container.layoutIfNeeded()
         #expect(content.nativeAd === newAd)
         #expect(!content.isHidden)
     }
@@ -659,6 +781,10 @@ final class NativeAdViewTests {
         )
         attach(container)
         let content = container.contentView
+        #expect(container.request.nativeAd === ad)
+        #expect(content.nativeAd == nil)
+        container.frame.size = container.fittingSize(width: 320, height: nil)
+        container.layoutIfNeeded()
         #expect(content.nativeAd === ad)
         #expect(!content.isHidden)
     }

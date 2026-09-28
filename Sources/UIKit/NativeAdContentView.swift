@@ -36,6 +36,7 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         var truncatesHeadline = false
     }
 
+    private var displayedAd: GoogleMobileAds.NativeAd?
     let layout: NativeAdLayout
     private(set) var usesMedia: Bool
 
@@ -43,9 +44,10 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     private let bodyLabel = makeLabel(style: .subheadline, color: .secondaryLabel)
     private let advertiserLabel = makeLabel(style: .footnote, color: .secondaryLabel)
     private let iconImageView = UIImageView()
-    private let callToActionButton = UIButton(configuration: .filled())
+    private let callToActionButton = NativeAdButton(configuration: .filled())
     private let adMediaView = GoogleMobileAds.MediaView()
     private let attributionLabel = makeAttributionLabel()
+    private let attributionContainer = UIView()
     private let metaSpacer = UIView()
     private let metaRow = UIStackView()
     private let headlineRow = UIStackView()
@@ -63,10 +65,6 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         maximumContentSizeCategory = Self.textSizeLimits[0]
         configureSubviews()
         headlineView = headlineLabel
-        bodyView = bodyLabel
-        advertiserView = advertiserLabel
-        iconView = iconImageView
-        callToActionView = callToActionButton
         mediaView = usesMedia ? adMediaView : nil
     }
 
@@ -75,9 +73,10 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    /// Displays the ad, assigning it after its assets are registered.
+    /// Populates the assets before their final layout is registered with the SDK.
     func display(_ nativeAd: GoogleMobileAds.NativeAd) {
         self.nativeAd = nil
+        displayedAd = nativeAd
         headlineLabel.text = nativeAd.headline
         bodyLabel.text = nativeAd.body
         advertiserLabel.text = nativeAd.advertiser
@@ -91,13 +90,22 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
         mediaView = usesMedia ? adMediaView : nil
         appliedFit = nil
         apply(fits(width: max(bounds.width, NativeAdMetrics.minimumWidth), aspectRatio: nativeAd.mediaContent.aspectRatio)[0])
-        self.nativeAd = nativeAd
         isHidden = false
+    }
+
+    /// Registers only after the container commits a viable layout. Registering
+    /// during loading or measurement gives the SDK zero or speculative bounds.
+    func registerAd() {
+        guard let displayedAd, nativeAd !== displayedAd else {
+            return
+        }
+        nativeAd = displayedAd
     }
 
     /// Releases the displayed ad and its media content.
     func clear() {
-        nativeAd?.rootViewController = nil
+        displayedAd?.rootViewController = nil
+        displayedAd = nil
         nativeAd = nil
         adMediaView.mediaContent = nil
         isHidden = true
@@ -106,7 +114,7 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
     /// Configures the assets for the given space and returns the resulting size,
     /// or `nil` when the required assets cannot be presented within it.
     func fit(width: CGFloat, maximumHeight: CGFloat?) -> CGSize? {
-        guard let nativeAd, width.isFinite, width >= NativeAdMetrics.minimumWidth else {
+        guard let nativeAd = displayedAd, width.isFinite, width >= NativeAdMetrics.minimumWidth else {
             return nil
         }
         // Each fit starts from the largest permitted text so a larger proposal
@@ -209,6 +217,12 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
             }
             headlineRow.alignment = fit.arrangement == .row ? .center : .top
         }
+        // Hidden stack-view children can retain frames outside our bounds.
+        // Register only presented assets so the SDK never tracks those frames.
+        bodyView = bodyLabel.isHidden ? nil : bodyLabel
+        advertiserView = advertiserLabel.isHidden ? nil : advertiserLabel
+        iconView = iconImageView.isHidden ? nil : iconImageView
+        callToActionView = callToActionButton.isHidden ? nil : callToActionButton
         guard let width else {
             return
         }
@@ -220,7 +234,11 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
             1,
             width - NativeAdMetrics.adChoicesInset - attributionLabel.intrinsicContentSize.width - NativeAdMetrics.spacing
         )
+        // Resolve inherited text-size limits before measuring the configured
+        // button; otherwise UIKit can grow it after the ad height is committed.
+        callToActionButton.updateTraitsIfNeeded()
         callToActionButton.updateConfiguration()
+        callToActionButton.layoutIfNeeded()
         if fit.truncatesHeadline {
             headlineLabel.numberOfLines = minimumLineCount(
                 for: headlineLabel,
@@ -277,17 +295,28 @@ final class NativeAdContentView: GoogleMobileAds.NativeAdView {
 
     private func configureSubviews() {
         metaRow.axis = .horizontal
-        metaRow.alignment = .firstBaseline
+        // The padded badge has a different baseline from the advertiser label.
+        // Fill alignment keeps both complete frames inside the header.
+        metaRow.alignment = .fill
         metaRow.spacing = NativeAdMetrics.spacing
         // Keep the SDK's default top-trailing AdChoices overlay clear of assets.
         metaRow.isLayoutMarginsRelativeArrangement = true
         metaRow.insetsLayoutMarginsFromSafeArea = false
         metaRow.directionalLayoutMargins = .init(top: 0, leading: 0, bottom: 0, trailing: NativeAdMetrics.adChoicesInset)
         metaSpacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        metaSpacer.heightAnchor.constraint(equalToConstant: 0).isActive = true
         attributionLabel.setContentHuggingPriority(.required, for: .horizontal)
         attributionLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
-        Self.arrange(metaRow, [attributionLabel, advertiserLabel, metaSpacer])
+        // The header can grow for a multiline advertiser without stretching
+        // the attribution badge to the same height.
+        attributionLabel.translatesAutoresizingMaskIntoConstraints = false
+        attributionContainer.addSubview(attributionLabel)
+        NSLayoutConstraint.activate([
+            attributionLabel.leadingAnchor.constraint(equalTo: attributionContainer.leadingAnchor),
+            attributionLabel.trailingAnchor.constraint(equalTo: attributionContainer.trailingAnchor),
+            attributionLabel.topAnchor.constraint(equalTo: attributionContainer.topAnchor),
+            attributionLabel.bottomAnchor.constraint(lessThanOrEqualTo: attributionContainer.bottomAnchor)
+        ])
+        Self.arrange(metaRow, [attributionContainer, advertiserLabel, metaSpacer])
 
         textColumn.axis = .vertical
         textColumn.spacing = NativeAdMetrics.spacing
@@ -399,5 +428,14 @@ private extension NSLayoutConstraint {
     func withPriority(_ priority: UILayoutPriority) -> NSLayoutConstraint {
         self.priority = priority
         return self
+    }
+}
+
+/// Integral intrinsic widths avoid trailing-edge rounding overflow when Auto
+/// Layout subtracts the button width from the row's available space.
+private final class NativeAdButton: UIButton {
+    override var intrinsicContentSize: CGSize {
+        let size = super.intrinsicContentSize
+        return .init(width: ceil(size.width), height: size.height)
     }
 }

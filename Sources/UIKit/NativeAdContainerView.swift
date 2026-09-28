@@ -90,7 +90,11 @@ final class NativeAdContainerView: UIView {
         if window != nil {
             request.prepareForAttachment()
         }
-        contentView.nativeAd?.rootViewController = presentingViewController
+        request.nativeAd?.rootViewController = presentingViewController
+        if window == nil {
+            contentView.nativeAd = nil
+        }
+        invalidateLayout()
         loadAdIfNeeded()
         scheduleDelivery()
     }
@@ -110,6 +114,12 @@ final class NativeAdContainerView: UIView {
         let size = contentView.fit(width: bounds.width, maximumHeight: bounds.height)
         contentView.isHidden = size == nil
         contentView.frame = .init(origin: .zero, size: size ?? .zero)
+        contentView.layoutIfNeeded()
+        if size != nil, window != nil {
+            contentView.registerAd()
+        } else {
+            contentView.nativeAd = nil
+        }
         // Bounds from before SwiftUI measured these assets may be stale, such as
         // the zero height reported while loading, so they cannot rule out a fit.
         if size != nil || isMeasured {
@@ -125,7 +135,7 @@ final class NativeAdContainerView: UIView {
         request.update(adUnitID: adUnitID, reloadID: reloadID)
         if self.layout != layout {
             self.layout = layout
-            let nativeAd = contentView.nativeAd
+            let nativeAd = request.nativeAd
             contentView.nativeAd = nil
             contentView.removeFromSuperview()
             contentView = .init(layout: layout)
@@ -135,7 +145,7 @@ final class NativeAdContainerView: UIView {
                 display(nativeAd)
             }
         }
-        contentView.nativeAd?.rootViewController = presentingViewController
+        request.nativeAd?.rootViewController = presentingViewController
         loadAdIfNeeded()
     }
 
