@@ -75,6 +75,116 @@ final class NativeAdViewTests {
         #expect(container.contentView.isHidden)
     }
 
+    @Test
+    func presentationStateFollowsCommittedBoundsRatherThanProbes() async throws {
+        let (container, loader) = makeView(layout: .compact)
+        var loadStates: [NativeAdLoadState] = []
+        var states: [NativeAdPresentationState] = []
+        container.onLoadStateChange = { state in
+            loadStates.append(state)
+        }
+        container.onPresentationStateChange = { state in
+            states.append(state)
+        }
+        await settle()
+        #expect(states == [.unavailable])
+
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.layoutIfNeeded()
+        // Delivery never happens inside the triggering layout pass.
+        #expect(states == [.unavailable])
+        await settle()
+        #expect(states == [.unavailable, .ready])
+
+        // Sizing probes reconfigure the assets but do not describe the committed layout.
+        #expect(container.fittingSize(width: 320, height: 20).height == 0)
+        #expect(container.fittingSize(width: 100, height: nil).height == 0)
+        await settle()
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable, .ready])
+        #expect(!container.contentView.isHidden)
+
+        container.frame.size.height = 30
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable, .ready, .insufficientSpace])
+        #expect(container.contentView.isHidden)
+
+        // Changes within one update are coalesced into the latest state.
+        container.frame.size = .init(width: 100, height: 600)
+        container.layoutIfNeeded()
+        container.frame.size = .init(width: 320, height: 600)
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable, .ready, .insufficientSpace, .ready])
+
+        let controller = try #require(container.superview)
+        container.removeFromSuperview()
+        await settle()
+        #expect(states.last == .unavailable)
+        controller.addSubview(container)
+        await settle()
+        #expect(states == [.unavailable, .ready, .insufficientSpace, .ready, .unavailable, .ready])
+        #expect(loader.loadCount == 1)
+
+        container.update(adUnitID: DemoAdUnitID.nativeAdvanced.rawValue, layout: .compact, reloadID: 1)
+        await settle()
+        #expect(states.last == .unavailable)
+        container.request.adLoader(loader, didFailToReceiveAdWithError: NSError(domain: "Test", code: 1))
+        container.layoutIfNeeded()
+        await settle()
+        #expect(loadStates == [.loading, .loaded, .loading, .failed])
+        #expect(states == [.unavailable, .ready, .insufficientSpace, .ready, .unavailable, .ready, .unavailable])
+    }
+
+    @Test
+    func boundsFromBeforeMeasurementDoNotReportInsufficientSpace() async {
+        let (container, loader) = makeView(layout: .compact)
+        var states: [NativeAdPresentationState] = []
+        container.onPresentationStateChange = { state in
+            states.append(state)
+        }
+        // SwiftUI committed the zero height reported while loading.
+        container.frame.size.height = 0
+        container.layoutIfNeeded()
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable])
+        #expect(container.presentationState == .unavailable)
+
+        // Measuring the same unfittable proposal commits the empty result.
+        #expect(container.fittingSize(width: 320, height: 30).height == 0)
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable, .insufficientSpace])
+
+        container.frame.size = container.fittingSize(width: 320, height: nil)
+        container.layoutIfNeeded()
+        await settle()
+        #expect(states == [.unavailable, .insufficientSpace, .ready])
+    }
+
+    @Test
+    func dismantledViewsStopDeliveringPresentationStates() async {
+        let (container, loader) = makeView(layout: .compact)
+        var states: [NativeAdPresentationState] = []
+        container.onPresentationStateChange = { state in
+            states.append(state)
+        }
+        await settle()
+        container.request.adLoader(loader, didReceive: StubNativeAd.fixture())
+        container.layoutIfNeeded()
+        NativeAdViewRepresentable.dismantleUIView(container, coordinator: ())
+        container.frame.size.height = 30
+        container.layoutIfNeeded()
+        container.removeFromSuperview()
+        await settle()
+        #expect(states == [.unavailable])
+        #expect(container.presentationState == .unavailable)
+    }
+
     @Test(arguments: [
         (NativeAdLayout.compact, CGSize(width: 320, height: 96)),
         (.compact, CGSize(width: 320, height: 128)),
@@ -89,6 +199,8 @@ final class NativeAdViewTests {
             container.layoutIfNeeded()
             let content = container.contentView
             #expect(!content.isHidden, "\(category.rawValue)")
+            // Large text alone never makes the ad unavailable for a viable slot.
+            #expect(container.presentationState == .ready)
             #expect(content.frame.height <= slot.height + 0.5)
             let headline = try #require(content.headlineView as? UILabel)
             #expect(headline.font.pointSize >= UIFont.preferredFont(

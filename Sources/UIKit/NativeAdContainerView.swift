@@ -17,12 +17,27 @@ final class NativeAdContainerView: UIView {
     let request: NativeAdRequest
     private(set) var contentView: NativeAdContentView
     private var fittedSize: CGSize?
+    /// Whether the current assets fit the committed bounds, or `nil` before their first layout.
+    private var fitsBounds: Bool?
+    /// Whether SwiftUI has measured the current assets since they last changed.
+    private var isMeasured = false
+    private var isDeliveryScheduled = false
     private var deliveredLoadState: NativeAdLoadState?
+    private var deliveredPresentationState: NativeAdPresentationState?
     /// Receives the latest load state after the current UIKit or SwiftUI update.
     var onLoadStateChange: ((NativeAdLoadState) -> Void)?
+    /// Receives the latest presentation state after the current UIKit or SwiftUI update.
+    var onPresentationStateChange: ((NativeAdPresentationState) -> Void)?
 
     var loadState: NativeAdLoadState {
         request.state
+    }
+
+    var presentationState: NativeAdPresentationState {
+        guard window != nil, loadState == .loaded, let fitsBounds else {
+            return .unavailable
+        }
+        return fitsBounds ? .ready : .insufficientSpace
     }
 
     private var presentingViewController: UIViewController? {
@@ -58,7 +73,7 @@ final class NativeAdContainerView: UIView {
         registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: NativeAdContainerView, _: UITraitCollection) in
             view.invalidateLayout()
         }
-        scheduleLoadStateDelivery()
+        scheduleDelivery()
     }
 
     static func makeDefaultAdLoader(adUnitID: String, controller: UIViewController?) -> GoogleMobileAds.AdLoader {
@@ -77,6 +92,7 @@ final class NativeAdContainerView: UIView {
         }
         contentView.nativeAd?.rootViewController = presentingViewController
         loadAdIfNeeded()
+        scheduleDelivery()
     }
 
     override func layoutSubviews() {
@@ -94,6 +110,12 @@ final class NativeAdContainerView: UIView {
         let size = contentView.fit(width: bounds.width, maximumHeight: bounds.height)
         contentView.isHidden = size == nil
         contentView.frame = .init(origin: .zero, size: size ?? .zero)
+        // Bounds from before SwiftUI measured these assets may be stale, such as
+        // the zero height reported while loading, so they cannot rule out a fit.
+        if size != nil || isMeasured {
+            fitsBounds = size != nil
+            scheduleDelivery()
+        }
     }
 
     func update(adUnitID: String, layout: NativeAdLayout, reloadID: Int = 0) {
@@ -136,6 +158,8 @@ final class NativeAdContainerView: UIView {
         guard loadState == .loaded else {
             return .init(width: width, height: 0)
         }
+        // Only committed bounds decide the presentation state, never this proposal.
+        isMeasured = true
         let size = contentView.fit(width: width, maximumHeight: height)
         // Probing reconfigured the assets, so the next layout pass must refit its bounds.
         fittedSize = nil
@@ -145,23 +169,35 @@ final class NativeAdContainerView: UIView {
 
     private func invalidateLayout() {
         fittedSize = nil
+        isMeasured = false
         invalidateIntrinsicContentSize()
         setNeedsLayout()
     }
 
-    private func scheduleLoadStateDelivery() {
-        // Deliver outside the current update so the app can change SwiftUI state safely.
+    private func scheduleDelivery() {
+        guard isDeliveryScheduled == false else {
+            return
+        }
+        isDeliveryScheduled = true
+        // Deliver outside the current update so the app can change SwiftUI state
+        // safely, coalescing changes into the latest states.
         Task { @MainActor [weak self] in
-            self?.deliverLoadState()
+            self?.deliverStates()
         }
     }
 
-    private func deliverLoadState() {
-        guard isDismantled == false, deliveredLoadState != loadState else {
-            return
+    private func deliverStates() {
+        isDeliveryScheduled = false
+        let loadState = loadState
+        if isDismantled == false, deliveredLoadState != loadState {
+            deliveredLoadState = loadState
+            onLoadStateChange?(loadState)
         }
-        deliveredLoadState = loadState
-        onLoadStateChange?(loadState)
+        let presentationState = presentationState
+        if isDismantled == false, deliveredPresentationState != presentationState {
+            deliveredPresentationState = presentationState
+            onPresentationStateChange?(presentationState)
+        }
     }
 
     private func loadAdIfNeeded() {
@@ -170,12 +206,13 @@ final class NativeAdContainerView: UIView {
 
     private func requestDidChange() {
         contentView.clear()
+        fitsBounds = nil
         if let nativeAd = request.nativeAd {
             display(nativeAd)
         } else {
             invalidateLayout()
         }
-        scheduleLoadStateDelivery()
+        scheduleDelivery()
     }
 
     private func display(_ nativeAd: GoogleMobileAds.NativeAd) {
