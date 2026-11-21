@@ -8,6 +8,13 @@ import Testing
 final class NativeAdViewTests {
     private var windows: [UIWindow] = []
 
+    isolated deinit {
+        for window in windows {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+    }
+
     @Test(arguments: NativeAdLayout.allCases)
     func layoutsTrackTheProposedWidthWithoutAFixedMaximum(layout: NativeAdLayout) {
         for width in [CGFloat(600), 360, 240, 320] {

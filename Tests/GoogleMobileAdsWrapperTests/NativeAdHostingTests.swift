@@ -9,6 +9,13 @@ import UIKit
 final class NativeAdHostingTests {
     private var windows: [UIWindow] = []
 
+    isolated deinit {
+        for window in windows {
+            window.isHidden = true
+            window.rootViewController = nil
+        }
+    }
+
     @Test
     func delayedLoadResizesTheHostedViewFromZeroToVisible() async throws {
         let loader = makeLoader()
