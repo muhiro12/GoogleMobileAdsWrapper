@@ -5,7 +5,7 @@ SwiftUI native ads and explicit Google UMP consent operations on iOS 17 and late
 ## Requirements
 
 - Xcode 26.2 or later; Swift 6 language mode.
-- Google Mobile Ads SDK 13.10.0 or a compatible 13.x release.
+- Google Mobile Ads SDK 13.13.0 or a compatible 13.x release.
 - Google UMP SDK 3.1.0 or a compatible 3.x release.
 
 ## Usage
