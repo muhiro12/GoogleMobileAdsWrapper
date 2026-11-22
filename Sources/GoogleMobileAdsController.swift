@@ -1,10 +1,22 @@
 import GoogleMobileAds
 
-/// Starts the Google Mobile Ads SDK on behalf of the app.
+/// Configures and starts the Google Mobile Ads SDK on behalf of the app.
 @MainActor
 public enum GoogleMobileAdsController {
     private static let initialization = GoogleMobileAdsInitialization {
         _ = await MobileAds.shared.start()
+    }
+
+    /// Controls SDK collection of coarse location when the app has location permission.
+    /// Leave this unset to use the SDK's current configuration. Set it before the first
+    /// SDK initialization to apply the selection to all ad requests.
+    public static var coarseLocationCollectionEnabled: Bool {
+        get {
+            MobileAds.shared.requestConfiguration.coarseLocationCollectionEnabled
+        }
+        set {
+            MobileAds.shared.requestConfiguration.coarseLocationCollectionEnabled = newValue
+        }
     }
 
     /// Waits for SDK initialization to complete. Concurrent calls share one start.

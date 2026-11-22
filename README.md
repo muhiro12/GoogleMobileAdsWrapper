@@ -329,6 +329,21 @@ initialization guidance and wait for adapter initialization before loading.
 Account message setup, audience choices, app-ads.txt, regional applicability,
 and Store declarations remain host-app or publisher responsibilities.
 
+Google Mobile Ads SDK 13.12.0 and later enable automatic coarse location
+collection for ads when the app has location permission. The wrapper uses
+the SDK's current setting. Review this behavior when updating from an older
+SDK, including when the app requests location permission for another feature.
+
+To disable collection through this SDK setting, assign the following on the
+main actor before the first call to `start()`:
+
+```swift
+GoogleMobileAdsController.coarseLocationCollectionEnabled = false
+```
+
+This setting applies to the shared Google Mobile Ads SDK instance. See
+[Google's coarse location guidance](https://developers.google.com/admob/ios/targeting#collect_coarse_location).
+
 ## Migration
 
 ### 2.0

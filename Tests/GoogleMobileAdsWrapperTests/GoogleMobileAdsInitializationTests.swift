@@ -1,9 +1,29 @@
+import GoogleMobileAds
 import Testing
 
 @testable import GoogleMobileAdsWrapper
 
 @MainActor
 struct GoogleMobileAdsInitializationTests {
+    @Test
+    func coarseLocationCollectionUsesTheSDKConfiguration() {
+        let configuration = MobileAds.shared.requestConfiguration
+        let previousValue = configuration.coarseLocationCollectionEnabled
+        defer {
+            configuration.coarseLocationCollectionEnabled = previousValue
+        }
+
+        #expect(GoogleMobileAdsController.coarseLocationCollectionEnabled == previousValue)
+
+        GoogleMobileAdsController.coarseLocationCollectionEnabled = false
+        #expect(!configuration.coarseLocationCollectionEnabled)
+        #expect(!GoogleMobileAdsController.coarseLocationCollectionEnabled)
+
+        GoogleMobileAdsController.coarseLocationCollectionEnabled = true
+        #expect(configuration.coarseLocationCollectionEnabled)
+        #expect(GoogleMobileAdsController.coarseLocationCollectionEnabled)
+    }
+
     @Test
     func concurrentAndRepeatedStartsShareOneInitialization() async throws {
         let gate = InitializationGate()
